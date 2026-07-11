@@ -1,4 +1,4 @@
-# 💊 AI-Powered Pharmaceutical CRM
+# 💊 AI Pharmaceutical CRM
 
 An AI-powered Pharmaceutical Customer Relationship Management (CRM) system built using **React**, **FastAPI**, **LangGraph**, and **Groq LLM** to automate Medical Representative (MR) interactions with healthcare professionals.
 
