@@ -1,25 +1,13 @@
-import os
-import json
+import logging
+from .ai_service import get_groq_client, clean_json_output, fallback_extract, AI_DISCLAIMER
+from config import settings
 
-from groq import Groq
-from dotenv import load_dotenv
-
-load_dotenv()
-
-api_key = os.getenv("GROQ_API_KEY")
-
-if not api_key:
-    raise Exception("GROQ_API_KEY not found in .env")
-
-print("API KEY:", api_key)
-
-client = Groq(api_key=api_key)
+logger = logging.getLogger("llm_service")
 
 SYSTEM_PROMPT = """
 You are an AI Medical CRM Assistant.
-
 Extract the following information and return ONLY valid JSON.
-
+Never include explanations or markdown fences.
 {
     "doctor":"",
     "hospital":"",
@@ -39,35 +27,25 @@ Extract the following information and return ONLY valid JSON.
 }
 """
 
+def generate_report(prompt: str) -> dict:
+    client = get_groq_client()
+    if not client:
+        logger.info("Using fallback extraction (Groq client not configured)")
+        return fallback_extract(prompt)
 
-def generate_report(prompt: str):
-
-    completion = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        temperature=0.2,
-        messages=[
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-    )
-
-    text = completion.choices[0].message.content.strip()
-
-    print("\n========== LLM RESPONSE ==========")
-    print(text)
-    print("==================================\n")
-
-    if text.startswith("```"):
-        text = (
-            text.replace("```json", "")
-                .replace("```", "")
-                .strip()
+    try:
+        completion = client.chat.completions.create(
+            model=settings.GROQ_MODEL,
+            temperature=0.2,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ]
         )
-
-    return json.loads(text)
+        text = completion.choices[0].message.content.strip()
+        data = clean_json_output(text)
+        data["disclaimer"] = AI_DISCLAIMER
+        return data
+    except Exception as e:
+        logger.warning("Groq API error during report generation: %s. Falling back.", e)
+        return fallback_extract(prompt)

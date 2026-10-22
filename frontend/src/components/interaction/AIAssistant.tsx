@@ -1,5 +1,6 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../../services/api";
+import { useToast } from "../../context/ToastContext";
 
 import { useDispatch, useSelector } from "react-redux";
 
@@ -8,6 +9,7 @@ import { setInteraction } from "./interactionSlice";
 import type { RootState } from "../../store/store";
 
 export default function AIAssistant() {
+  const { showToast } = useToast();
   const dispatch = useDispatch();
 
   const interaction = useSelector(
@@ -20,7 +22,7 @@ export default function AIAssistant() {
 
   const generate = async () => {
     if (!prompt.trim()) {
-      alert("Please enter a conversation first.");
+      showToast("Please enter a conversation first.", "warning");
       return;
     }
 
@@ -29,8 +31,8 @@ export default function AIAssistant() {
 
       console.log("Sending Prompt:", prompt);
 
-      const res = await axios.post(
-        "http://127.0.0.1:8000/generate",
+      const res = await api.post(
+        "/generate",
         {
           prompt,
         }
@@ -75,7 +77,7 @@ setTimeout(() => {
         console.log("Response:", err.response.data);
       }
 
-      alert("AI Generation Failed");
+      showToast("AI Generation Failed. Please try again.", "error");
     } finally {
       setLoading(false);
     }

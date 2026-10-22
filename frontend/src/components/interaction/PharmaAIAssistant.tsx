@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
+import api from "../../services/api";
 
 import { Bot, User, Send, Sparkles } from "lucide-react";
 
@@ -81,8 +81,8 @@ export default function PharmaAIAssistant() {
       history,
     });
 
-    const res = await axios.post(
-      "http://127.0.0.1:8000/assistant",
+    const res = await api.post(
+      "/assistant",
       {
         interaction,
         message: text,

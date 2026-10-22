@@ -4,13 +4,15 @@ import {
   ClipboardList,
   FileText,
 } from "lucide-react";
-import axios from "axios";
+import api from "../../services/api";
+import { useToast } from "../../context/ToastContext";
 
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { updateField } from "./interactionSlice";
 import type { Interaction } from "../../types/interaction";
 
 export default function InteractionForm() {
+  const { showToast } = useToast();
   const interaction = useAppSelector(
     (state) => state.interaction
   );
@@ -56,20 +58,11 @@ export default function InteractionForm() {
 
   const saveInteraction = async () => {
     try {
-
-      await axios.post(
-        "http://127.0.0.1:8000/save",
-        interaction
-      );
-
-      alert("Interaction Saved Successfully");
-
+      await api.post("/save", interaction);
+      showToast("Call Report Saved Successfully!", "success");
     } catch (err) {
-
       console.error(err);
-
-      alert("Failed to Save");
-
+      showToast("Failed to save call report. Please verify connection.", "error");
     }
   };
 
