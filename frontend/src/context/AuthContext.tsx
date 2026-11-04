@@ -5,7 +5,7 @@ export interface UserProfile {
   id: number;
   email: string;
   full_name: string;
-  role: "ADMIN" | "SALES_REP" | "MEDICAL_DIRECTOR" | "COMPLIANCE_OFFICER";
+  role: "ADMIN" | "SALES_REP" | "MEDICAL_DIRECTOR" | "COMPLIANCE_OFFICER" | "PATIENT" | "PHARMACIST" | "DOCTOR" | string;
   territory_id?: number | null;
   phone?: string | null;
   is_active: boolean;
@@ -18,14 +18,22 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<UserProfile>;
   logout: () => void;
   isAdmin: boolean;
+  isDoctor: boolean;
+  isPatient: boolean;
+  isPharmacist: boolean;
+  isSalesRep: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem("medintel_user");
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem("medintel_user");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("medintel_token"));
   const [loading, setLoading] = useState<boolean>(true);
@@ -39,8 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(res.data);
           localStorage.setItem("medintel_user", JSON.stringify(res.data));
         } catch (err) {
-          console.warn("Session expired or invalid, logging out");
-          logout();
+          console.warn("Session expired or invalid, resetting authentication state");
+          localStorage.removeItem("medintel_token");
+          localStorage.removeItem("medintel_user");
+          setToken(null);
+          setUser(null);
         }
       }
       setLoading(false);
@@ -67,9 +78,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const isAdmin = user?.role === "ADMIN";
+  const isDoctor = user?.role === "DOCTOR" || user?.role === "MEDICAL_DIRECTOR";
+  const isPatient = user?.role === "PATIENT";
+  const isPharmacist = user?.role === "PHARMACIST";
+  const isSalesRep = user?.role === "SALES_REP" || (!isPatient && !isDoctor && !isPharmacist && !isAdmin);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, isAdmin }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        loading,
+        login,
+        logout,
+        isAdmin,
+        isDoctor,
+        isPatient,
+        isPharmacist,
+        isSalesRep,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -18,6 +18,11 @@ interface Product {
   regulatory_status: string;
   storage_conditions: string;
   package_size: string;
+  schedule_category?: string;
+  mrp_inr?: number;
+  ptr_inr?: number;
+  gst_percentage?: number;
+  barcode_gtin?: string;
   is_active: boolean;
 }
 
@@ -55,7 +60,7 @@ export default function ProductCatalogue() {
   return (
     <DashboardLayout
       title="Pharmaceutical Product Catalogue"
-      subtitle="FDA/EMA approved indications, therapeutic classes, dosage specifications & storage"
+      subtitle="CDSCO approved formulations, Indian brands, Schedule categories & standard MRP"
     >
       {/* Control Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -65,7 +70,7 @@ export default function ProductCatalogue() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by brand name, generic name, NDC..."
+              placeholder="Search by Indian brand, generic salt (e.g. PARACETAMOL), Schedule..."
               className="outline-none bg-transparent text-sm w-full"
             />
           </div>
@@ -131,7 +136,13 @@ export default function ProductCatalogue() {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">NDC Code:</span>
+                    <span className="text-slate-400">Schedule & MRP:</span>
+                    <span className="font-semibold text-indigo-700">
+                      {p.schedule_category || "Schedule H"} • ₹{(p.mrp_inr || 100).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">CDSCO / Drug ID:</span>
                     <span className="font-mono font-medium text-slate-800">{p.ndc_code}</span>
                   </div>
                 </div>

@@ -17,6 +17,12 @@ import CampaignManagement from "./pages/CampaignManagement";
 import UserManagement from "./pages/UserManagement";
 import AuditLogs from "./pages/AuditLogs";
 import Reports from "./pages/Reports";
+import NearbyHealthcare from "./pages/NearbyHealthcare";
+import MyMedication from "./pages/MyMedication";
+import Appointments from "./pages/Appointments";
+import PharmacyOrders from "./pages/PharmacyOrders";
+import MedicalReports from "./pages/MedicalReports";
+import PharmacyInventoryPage from "./pages/PharmacyInventoryPage";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -64,6 +70,54 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/nearby-healthcare"
+                element={
+                  <ProtectedRoute>
+                    <NearbyHealthcare />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/medications"
+                element={
+                  <ProtectedRoute>
+                    <MyMedication />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/appointments"
+                element={
+                  <ProtectedRoute>
+                    <Appointments />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/pharmacy-orders"
+                element={
+                  <ProtectedRoute>
+                    <PharmacyOrders />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/medical-reports"
+                element={
+                  <ProtectedRoute>
+                    <MedicalReports />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/pharmacy-inventory"
+                element={
+                  <ProtectedRoute>
+                    <PharmacyInventoryPage />
                   </ProtectedRoute>
                 }
               />

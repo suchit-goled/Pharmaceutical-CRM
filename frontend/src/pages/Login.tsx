@@ -24,7 +24,12 @@ export default function Login() {
       showToast("Signed in successfully. Welcome back!", "success");
       navigate("/dashboard");
     } catch (err: any) {
-      const msg = err.response?.data?.detail || "Invalid email or password. Please try again.";
+      let msg = "Invalid email or password. Please try again.";
+      if (err.response?.data?.detail) {
+        msg = err.response.data.detail;
+      } else if (err.code === "ERR_NETWORK" || !err.response) {
+        msg = "Backend server is not reachable. Please make sure the FastAPI server is running on http://127.0.0.1:8000.";
+      }
       setError(msg);
       showToast(msg, "error");
     } finally {
@@ -35,6 +40,7 @@ export default function Login() {
   const handleQuickLogin = (quickEmail: string, quickPass: string) => {
     setEmail(quickEmail);
     setPassword(quickPass);
+    setError(null);
   };
 
   return (

@@ -24,13 +24,13 @@ export default function Header({ title, subtitle }: HeaderProps) {
         {/* Compliance & System Badge */}
         <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium">
           <ShieldCheck size={16} className="text-emerald-600" />
-          <span>PDMA Compliant</span>
+          <span>CDSCO & DPDPA Compliant</span>
         </div>
 
         <div className="flex items-center gap-2 border border-slate-200 rounded-xl px-3.5 py-2 bg-slate-50 text-slate-600 w-64">
           <Search size={16} className="text-slate-400" />
           <input
-            placeholder="Search HCP, NPI, Drug..."
+            placeholder="Search Doctor, NMC Reg, Medicine, PIN..."
             className="outline-none bg-transparent text-sm w-full placeholder:text-slate-400"
           />
         </div>
