@@ -4,7 +4,7 @@ import io
 import uuid
 import logging
 from typing import Optional, List
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from pathlib import Path
 
 from fastapi import (
@@ -31,6 +31,8 @@ from auth import (
 )
 from middleware import SecurityHeadersMiddleware, RateLimitMiddleware
 from services.ai_service import fallback_extract, fallback_assistant, AI_DISCLAIMER
+from services.healthcare_service import get_nearby_healthcare_facilities, fetch_osm_nearby, geocode_query
+from services.medication_verification import verify_medication_payload
 from ai_graph.graph import graph
 from ai_graph.nodes import pharma_ai_assistant
 
@@ -924,3 +926,1132 @@ def assistant(data: AssistantRequest):
     except Exception as e:
         logger.warning("Assistant error: %s. Using fallback.", e)
         return fallback_assistant(data.message, data.interaction, data.history)
+
+# ---------------------------------------------------------
+# Healthcare Map Endpoints
+# ---------------------------------------------------------
+@app.get("/api/healthcare/nearby", response_model=List[schemas.HealthcareLocationOut], tags=["Healthcare Map"])
+async def get_nearby_healthcare(
+    lat: float = Query(..., description="User latitude"),
+    lng: float = Query(..., description="User longitude"),
+    radius_km: float = Query(25.0, ge=1.0, le=100.0),
+    category: Optional[str] = Query(None, description="Filter: All, Pharmacy, Clinic, Hospital"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    internal_facilities = get_nearby_healthcare_facilities(db, lat=lat, lng=lng, radius_km=radius_km, category=category)
+    external_facilities = await fetch_osm_nearby(lat=lat, lng=lng, radius_km=radius_km, category=category)
+    
+    merged = list(internal_facilities)
+    seen_names = {f["name"].strip().lower() for f in merged}
+    
+    for ext in external_facilities:
+        if ext["name"].strip().lower() not in seen_names:
+            merged.append(ext)
+            seen_names.add(ext["name"].strip().lower())
+            
+    merged.sort(key=lambda x: x["distance_km"])
+    return merged[:50]
+
+@app.get("/api/healthcare/geocode", tags=["Healthcare Map"])
+async def geocode_location(
+    query: str = Query(..., min_length=2, description="PIN code, city or area name"),
+    current_user: models.User = Depends(get_current_user)
+):
+    res = await geocode_query(query)
+    if not res:
+        raise HTTPException(status_code=404, detail="Location could not be geocoded. Please enter a valid city or PIN code.")
+    return res
+
+# ---------------------------------------------------------
+# Smart Medication & Prescription Endpoints
+# ---------------------------------------------------------
+@app.post("/api/prescriptions", response_model=schemas.PrescriptionOut, tags=["Medications"])
+def create_prescription(
+    prescription_in: schemas.PrescriptionCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role not in ("ADMIN", "MEDICAL_DIRECTOR"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Only authorized physicians or administrators can assign medications."
+        )
+
+    patient = db.query(models.User).filter(models.User.id == prescription_in.patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Target patient/user does not exist")
+
+    prescription = models.Prescription(
+        patient_id=prescription_in.patient_id,
+        prescriber_id=current_user.id,
+        product_id=prescription_in.product_id,
+        medicine_name=prescription_in.medicine_name,
+        generic_name=prescription_in.generic_name,
+        strength=prescription_in.strength,
+        dosage_quantity=prescription_in.dosage_quantity,
+        dosage_unit=prescription_in.dosage_unit,
+        frequency=prescription_in.frequency,
+        scheduled_times=prescription_in.scheduled_times,
+        start_date=prescription_in.start_date,
+        end_date=prescription_in.end_date,
+        food_instruction=prescription_in.food_instruction,
+        instructions=prescription_in.instructions,
+        prescription_attachment=prescription_in.prescription_attachment,
+        schedule_category=prescription_in.schedule_category or "Schedule H",
+        route=prescription_in.route or "Oral",
+        frequency_indian=prescription_in.frequency_indian or "Once Daily (OD)",
+        duration_days=prescription_in.duration_days or 5,
+        doctor_registration_no=prescription_in.doctor_registration_no or getattr(current_user, "medical_council_reg_no", None) or "KMC-45892",
+        instructions_vernacular=prescription_in.instructions_vernacular,
+        status="Active"
+    )
+    db.add(prescription)
+    db.flush()
+
+    slot_times = {"Morning": "08:00", "Afternoon": "13:00", "Evening": "18:00", "Night": "21:00"}
+    cur_date = prescription_in.start_date
+    max_days = 14
+    for day_offset in range(max_days):
+        d = cur_date + timedelta(days=day_offset)
+        if prescription_in.end_date and d > prescription_in.end_date:
+            break
+        for slot in prescription_in.scheduled_times:
+            db.add(models.MedicationScheduleLog(
+                prescription_id=prescription.id,
+                user_id=patient.id,
+                scheduled_date=d,
+                scheduled_slot=slot,
+                scheduled_time=slot_times.get(slot, "08:00"),
+                status="Scheduled",
+                is_verified=False
+            ))
+
+    db.commit()
+    db.refresh(prescription)
+
+    log_audit_event(
+        db,
+        actor_email=current_user.email,
+        action="PRESCRIPTION_ASSIGNED",
+        entity_type="PRESCRIPTION",
+        entity_id=str(prescription.id),
+        details=f"Assigned {prescription.medicine_name} {prescription.strength} to user {patient.email}",
+        user_id=current_user.id
+    )
+
+    return schemas.PrescriptionOut(
+        id=prescription.id,
+        patient_id=prescription.patient_id,
+        prescriber_id=prescription.prescriber_id,
+        prescriber_name=current_user.full_name,
+        patient_name=patient.full_name,
+        product_id=prescription.product_id,
+        medicine_name=prescription.medicine_name,
+        generic_name=prescription.generic_name,
+        strength=prescription.strength,
+        dosage_quantity=prescription.dosage_quantity,
+        dosage_unit=prescription.dosage_unit,
+        frequency=prescription.frequency,
+        scheduled_times=prescription.scheduled_times,
+        start_date=prescription.start_date,
+        end_date=prescription.end_date,
+        food_instruction=prescription.food_instruction,
+        instructions=prescription.instructions,
+        prescription_attachment=prescription.prescription_attachment,
+        status=prescription.status,
+        created_at=prescription.created_at,
+        updated_at=prescription.updated_at
+    )
+
+@app.get("/api/prescriptions", response_model=List[schemas.PrescriptionOut], tags=["Medications"])
+def get_prescriptions(
+    patient_id: Optional[int] = None,
+    status_filter: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    query = db.query(models.Prescription)
+
+    if current_user.role not in ("ADMIN", "MEDICAL_DIRECTOR"):
+        query = query.filter(models.Prescription.patient_id == current_user.id)
+    else:
+        if patient_id:
+            query = query.filter(models.Prescription.patient_id == patient_id)
+
+    if status_filter:
+        query = query.filter(models.Prescription.status == status_filter)
+
+    prescriptions = query.order_by(desc(models.Prescription.id)).all()
+    out = []
+    for p in prescriptions:
+        pat = db.query(models.User).filter(models.User.id == p.patient_id).first()
+        doc = db.query(models.User).filter(models.User.id == p.prescriber_id).first()
+        out.append(schemas.PrescriptionOut(
+            id=p.id,
+            patient_id=p.patient_id,
+            prescriber_id=p.prescriber_id,
+            prescriber_name=doc.full_name if doc else "Authorized Prescriber",
+            patient_name=pat.full_name if pat else "Patient",
+            product_id=p.product_id,
+            medicine_name=p.medicine_name,
+            generic_name=p.generic_name,
+            strength=p.strength,
+            dosage_quantity=p.dosage_quantity,
+            dosage_unit=p.dosage_unit,
+            frequency=p.frequency,
+            scheduled_times=p.scheduled_times,
+            start_date=p.start_date,
+            end_date=p.end_date,
+            food_instruction=p.food_instruction,
+            instructions=p.instructions,
+            prescription_attachment=p.prescription_attachment,
+            status=p.status,
+            created_at=p.created_at,
+            updated_at=p.updated_at
+        ))
+    return out
+
+@app.put("/api/prescriptions/{id}", response_model=schemas.PrescriptionOut, tags=["Medications"])
+def update_prescription(
+    id: int,
+    data: schemas.PrescriptionUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    prescription = db.query(models.Prescription).filter(models.Prescription.id == id).first()
+    if not prescription:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    if current_user.role not in ("ADMIN", "MEDICAL_DIRECTOR") and prescription.prescriber_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized to modify this prescription")
+
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(prescription, k, v)
+    prescription.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(prescription)
+
+    pat = db.query(models.User).filter(models.User.id == prescription.patient_id).first()
+    doc = db.query(models.User).filter(models.User.id == prescription.prescriber_id).first()
+    return schemas.PrescriptionOut(
+        id=prescription.id,
+        patient_id=prescription.patient_id,
+        prescriber_id=prescription.prescriber_id,
+        prescriber_name=doc.full_name if doc else "Authorized Prescriber",
+        patient_name=pat.full_name if pat else "Patient",
+        product_id=prescription.product_id,
+        medicine_name=prescription.medicine_name,
+        generic_name=prescription.generic_name,
+        strength=prescription.strength,
+        dosage_quantity=prescription.dosage_quantity,
+        dosage_unit=prescription.dosage_unit,
+        frequency=prescription.frequency,
+        scheduled_times=prescription.scheduled_times,
+        start_date=prescription.start_date,
+        end_date=prescription.end_date,
+        food_instruction=prescription.food_instruction,
+        instructions=prescription.instructions,
+        prescription_attachment=prescription.prescription_attachment,
+        status=prescription.status,
+        created_at=prescription.created_at,
+        updated_at=prescription.updated_at
+    )
+
+@app.get("/api/medications/schedule/today", response_model=List[schemas.MedicationScheduleLogOut], tags=["Medications"])
+def get_today_schedule(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    today = datetime.now(timezone.utc).date()
+    
+    active_prescriptions = db.query(models.Prescription).filter(
+        models.Prescription.patient_id == current_user.id,
+        models.Prescription.status == "Active",
+        models.Prescription.start_date <= today,
+        or_(models.Prescription.end_date == None, models.Prescription.end_date >= today)
+    ).all()
+
+    slot_times = {"Morning": "08:00", "Afternoon": "13:00", "Evening": "18:00", "Night": "21:00"}
+    for p in active_prescriptions:
+        for slot in p.scheduled_times:
+            existing = db.query(models.MedicationScheduleLog).filter(
+                models.MedicationScheduleLog.prescription_id == p.id,
+                models.MedicationScheduleLog.scheduled_date == today,
+                models.MedicationScheduleLog.scheduled_slot == slot
+            ).first()
+            if not existing:
+                db.add(models.MedicationScheduleLog(
+                    prescription_id=p.id,
+                    user_id=current_user.id,
+                    scheduled_date=today,
+                    scheduled_slot=slot,
+                    scheduled_time=slot_times.get(slot, "08:00"),
+                    status="Scheduled",
+                    is_verified=False
+                ))
+    db.commit()
+
+    logs = db.query(models.MedicationScheduleLog).join(models.Prescription).filter(
+        models.MedicationScheduleLog.user_id == current_user.id,
+        models.MedicationScheduleLog.scheduled_date == today
+    ).order_by(models.MedicationScheduleLog.scheduled_time.asc()).all()
+
+    out = []
+    for l in logs:
+        p = l.prescription
+        out.append(schemas.MedicationScheduleLogOut(
+            id=l.id,
+            prescription_id=l.prescription_id,
+            medicine_name=p.medicine_name,
+            generic_name=p.generic_name,
+            strength=p.strength,
+            dosage_quantity=p.dosage_quantity,
+            dosage_unit=p.dosage_unit,
+            food_instruction=p.food_instruction,
+            instructions=p.instructions,
+            scheduled_date=l.scheduled_date,
+            scheduled_slot=l.scheduled_slot,
+            scheduled_time=l.scheduled_time,
+            status=l.status,
+            taken_at=l.taken_at,
+            skipped_reason=l.skipped_reason,
+            snooze_until=l.snooze_until,
+            is_verified=l.is_verified,
+            verification_method=l.verification_method,
+            verification_notes=l.verification_notes,
+            verification_image_url=l.verification_image_url
+        ))
+    return out
+
+@app.post("/api/medications/schedule/{id}/take", response_model=schemas.MedicationScheduleLogOut, tags=["Medications"])
+def mark_dose_taken(
+    id: int,
+    req: schemas.MedicationDoseTakeRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    log = db.query(models.MedicationScheduleLog).filter(models.MedicationScheduleLog.id == id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Dose record not found")
+    if log.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    if log.status == "Taken":
+        raise HTTPException(status_code=400, detail="This scheduled dose has already been confirmed as taken.")
+
+    log.status = "Taken"
+    log.taken_at = datetime.now(timezone.utc)
+    log.is_verified = req.is_verified
+    log.verification_method = req.verification_method
+    log.verification_notes = req.verification_notes
+    log.verification_image_url = req.verification_image_url
+    log.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(log)
+
+    log_audit_event(
+        db,
+        actor_email=current_user.email,
+        action="MEDICATION_DOSE_TAKEN",
+        entity_type="MEDICATION_LOG",
+        entity_id=str(log.id),
+        details=f"Confirmed dose {log.prescription.medicine_name} ({log.scheduled_slot}) with verification: {req.verification_method}",
+        user_id=current_user.id
+    )
+
+    p = log.prescription
+    return schemas.MedicationScheduleLogOut(
+        id=log.id,
+        prescription_id=log.prescription_id,
+        medicine_name=p.medicine_name,
+        generic_name=p.generic_name,
+        strength=p.strength,
+        dosage_quantity=p.dosage_quantity,
+        dosage_unit=p.dosage_unit,
+        food_instruction=p.food_instruction,
+        instructions=p.instructions,
+        scheduled_date=log.scheduled_date,
+        scheduled_slot=log.scheduled_slot,
+        scheduled_time=log.scheduled_time,
+        status=log.status,
+        taken_at=log.taken_at,
+        skipped_reason=log.skipped_reason,
+        snooze_until=log.snooze_until,
+        is_verified=log.is_verified,
+        verification_method=log.verification_method,
+        verification_notes=log.verification_notes,
+        verification_image_url=log.verification_image_url
+    )
+
+@app.post("/api/medications/schedule/{id}/skip", response_model=schemas.MedicationScheduleLogOut, tags=["Medications"])
+def mark_dose_skipped(
+    id: int,
+    req: schemas.MedicationDoseSkipRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    log = db.query(models.MedicationScheduleLog).filter(models.MedicationScheduleLog.id == id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Dose record not found")
+    if log.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    if not req.reason or not req.reason.strip():
+        raise HTTPException(status_code=400, detail="A reason is required to skip a scheduled dose.")
+
+    log.status = "Skipped"
+    log.skipped_reason = req.reason.strip()
+    log.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(log)
+
+    log_audit_event(
+        db,
+        actor_email=current_user.email,
+        action="MEDICATION_DOSE_SKIPPED",
+        entity_type="MEDICATION_LOG",
+        entity_id=str(log.id),
+        details=f"Skipped dose {log.prescription.medicine_name} ({log.scheduled_slot}). Reason: {req.reason}",
+        user_id=current_user.id
+    )
+
+    p = log.prescription
+    return schemas.MedicationScheduleLogOut(
+        id=log.id,
+        prescription_id=log.prescription_id,
+        medicine_name=p.medicine_name,
+        generic_name=p.generic_name,
+        strength=p.strength,
+        dosage_quantity=p.dosage_quantity,
+        dosage_unit=p.dosage_unit,
+        food_instruction=p.food_instruction,
+        instructions=p.instructions,
+        scheduled_date=log.scheduled_date,
+        scheduled_slot=log.scheduled_slot,
+        scheduled_time=log.scheduled_time,
+        status=log.status,
+        taken_at=log.taken_at,
+        skipped_reason=log.skipped_reason,
+        snooze_until=log.snooze_until,
+        is_verified=log.is_verified,
+        verification_method=log.verification_method,
+        verification_notes=log.verification_notes,
+        verification_image_url=log.verification_image_url
+    )
+
+@app.post("/api/medications/schedule/{id}/snooze", response_model=schemas.MedicationScheduleLogOut, tags=["Medications"])
+def snooze_dose(
+    id: int,
+    req: schemas.MedicationDoseSnoozeRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    log = db.query(models.MedicationScheduleLog).filter(models.MedicationScheduleLog.id == id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Dose record not found")
+    if log.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    mins = max(5, min(req.snooze_minutes, 180))
+    log.status = "Snoozed"
+    log.snooze_until = datetime.now(timezone.utc) + timedelta(minutes=mins)
+    log.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(log)
+
+    p = log.prescription
+    return schemas.MedicationScheduleLogOut(
+        id=log.id,
+        prescription_id=log.prescription_id,
+        medicine_name=p.medicine_name,
+        generic_name=p.generic_name,
+        strength=p.strength,
+        dosage_quantity=p.dosage_quantity,
+        dosage_unit=p.dosage_unit,
+        food_instruction=p.food_instruction,
+        instructions=p.instructions,
+        scheduled_date=log.scheduled_date,
+        scheduled_slot=log.scheduled_slot,
+        scheduled_time=log.scheduled_time,
+        status=log.status,
+        taken_at=log.taken_at,
+        skipped_reason=log.skipped_reason,
+        snooze_until=log.snooze_until,
+        is_verified=log.is_verified,
+        verification_method=log.verification_method,
+        verification_notes=log.verification_notes,
+        verification_image_url=log.verification_image_url
+    )
+
+@app.post("/api/medications/schedule/{id}/verify", response_model=schemas.MedicationVerificationResponse, tags=["Medications"])
+def verify_medication_dose(
+    id: int,
+    req: schemas.MedicationVerificationRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    log = db.query(models.MedicationScheduleLog).filter(models.MedicationScheduleLog.id == id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Dose record not found")
+    if log.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    prescription = log.prescription
+    res = verify_medication_payload(
+        prescribed_name=prescription.medicine_name,
+        prescribed_generic=prescription.generic_name,
+        prescribed_strength=prescription.strength,
+        prescribed_food_instruction=prescription.food_instruction,
+        input_text=req.packaging_text,
+        image_base64=req.image_base64,
+        barcode=req.barcode
+    )
+    return res
+
+@app.get("/api/medications/adherence", response_model=schemas.MedicationAdherenceReport, tags=["Medications"])
+def get_medication_adherence(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    today = datetime.now(timezone.utc).date()
+    week_ago = today - timedelta(days=7)
+
+    week_logs = db.query(models.MedicationScheduleLog).filter(
+        models.MedicationScheduleLog.user_id == current_user.id,
+        models.MedicationScheduleLog.scheduled_date >= week_ago,
+        models.MedicationScheduleLog.scheduled_date <= today
+    ).all()
+
+    today_logs = [l for l in week_logs if l.scheduled_date == today]
+
+    total_week = len(week_logs)
+    taken_week = sum(1 for l in week_logs if l.status == "Taken")
+    skipped_week = sum(1 for l in week_logs if l.status == "Skipped")
+    verified_week = sum(1 for l in week_logs if l.is_verified)
+    missed_week = sum(1 for l in week_logs if l.status == "Scheduled" and l.scheduled_date < today)
+
+    weekly_rate = round((taken_week / total_week * 100), 1) if total_week > 0 else 100.0
+    daily_rate = round((sum(1 for l in today_logs if l.status == "Taken") / len(today_logs) * 100), 1) if len(today_logs) > 0 else 100.0
+    verified_pct = round((verified_week / taken_week * 100), 1) if taken_week > 0 else 0.0
+
+    return schemas.MedicationAdherenceReport(
+        daily_adherence_rate=daily_rate,
+        weekly_adherence_rate=weekly_rate,
+        total_doses=total_week,
+        taken_doses=taken_week,
+        skipped_doses=skipped_week,
+        missed_doses=missed_week,
+        verified_percentage=verified_pct
+    )
+
+
+# =========================================================
+# Clinical Appointments Endpoints
+# =========================================================
+@app.post("/api/appointments", response_model=schemas.AppointmentOut, tags=["Appointments"])
+def book_appointment(
+    appt_in: schemas.AppointmentCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    doctor = None
+    if appt_in.doctor_id:
+        doctor = db.query(models.User).filter(models.User.id == appt_in.doctor_id).first()
+    hcp = None
+    if appt_in.hcp_id:
+        hcp = db.query(models.HCP).filter(models.HCP.id == appt_in.hcp_id).first()
+
+    appt = models.Appointment(
+        patient_id=current_user.id,
+        doctor_id=appt_in.doctor_id,
+        hcp_id=appt_in.hcp_id,
+        appointment_date=appt_in.appointment_date,
+        slot_time=appt_in.slot_time,
+        appointment_type=appt_in.appointment_type,
+        reason=appt_in.reason,
+        status="Requested"
+    )
+    db.add(appt)
+    db.commit()
+    db.refresh(appt)
+
+    return schemas.AppointmentOut(
+        id=appt.id,
+        patient_id=appt.patient_id,
+        patient_name=current_user.full_name,
+        doctor_id=appt.doctor_id,
+        doctor_name=doctor.full_name if doctor else (f"Dr. {hcp.first_name} {hcp.last_name}" if hcp else "Attending Physician"),
+        hcp_id=appt.hcp_id,
+        hcp_name=f"Dr. {hcp.first_name} {hcp.last_name}" if hcp else None,
+        appointment_date=appt.appointment_date,
+        slot_time=appt.slot_time,
+        appointment_type=appt.appointment_type,
+        reason=appt.reason,
+        status=appt.status,
+        clinical_notes=appt.clinical_notes,
+        diagnosis=appt.diagnosis,
+        created_at=appt.created_at
+    )
+
+@app.get("/api/appointments", response_model=List[schemas.AppointmentOut], tags=["Appointments"])
+def list_appointments(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    query = db.query(models.Appointment)
+    if current_user.role in ("PATIENT", "SALES_REP"):
+        query = query.filter(models.Appointment.patient_id == current_user.id)
+    elif current_user.role in ("DOCTOR", "MEDICAL_DIRECTOR"):
+        query = query.filter(or_(models.Appointment.doctor_id == current_user.id, models.Appointment.doctor_id == None))
+
+    appts = query.order_by(models.Appointment.appointment_date.desc(), models.Appointment.id.desc()).all()
+    out = []
+    for a in appts:
+        pat = db.query(models.User).filter(models.User.id == a.patient_id).first()
+        doc = db.query(models.User).filter(models.User.id == a.doctor_id).first() if a.doctor_id else None
+        hcp = db.query(models.HCP).filter(models.HCP.id == a.hcp_id).first() if a.hcp_id else None
+        out.append(schemas.AppointmentOut(
+            id=a.id,
+            patient_id=a.patient_id,
+            patient_name=pat.full_name if pat else f"Patient #{a.patient_id}",
+            doctor_id=a.doctor_id,
+            doctor_name=doc.full_name if doc else (f"Dr. {hcp.first_name} {hcp.last_name}" if hcp else "Attending Physician"),
+            hcp_id=a.hcp_id,
+            hcp_name=f"Dr. {hcp.first_name} {hcp.last_name}" if hcp else None,
+            appointment_date=a.appointment_date,
+            slot_time=a.slot_time,
+            appointment_type=a.appointment_type,
+            reason=a.reason,
+            status=a.status,
+            clinical_notes=a.clinical_notes,
+            diagnosis=a.diagnosis,
+            created_at=a.created_at
+        ))
+    return out
+
+@app.put("/api/appointments/{id}/status", response_model=schemas.AppointmentOut, tags=["Appointments"])
+def update_appointment_status(
+    id: int,
+    status_in: schemas.AppointmentStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    appt = db.query(models.Appointment).filter(models.Appointment.id == id).first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    
+    if current_user.role not in ("ADMIN", "MEDICAL_DIRECTOR", "DOCTOR") and appt.patient_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized to modify this appointment")
+    
+    appt.status = status_in.status
+    if current_user.role in ("ADMIN", "MEDICAL_DIRECTOR", "DOCTOR") and not appt.doctor_id:
+        appt.doctor_id = current_user.id
+    db.commit()
+    db.refresh(appt)
+
+    pat = db.query(models.User).filter(models.User.id == appt.patient_id).first()
+    doc = db.query(models.User).filter(models.User.id == appt.doctor_id).first() if appt.doctor_id else None
+    hcp = db.query(models.HCP).filter(models.HCP.id == appt.hcp_id).first() if appt.hcp_id else None
+    return schemas.AppointmentOut(
+        id=appt.id,
+        patient_id=appt.patient_id,
+        patient_name=pat.full_name if pat else f"Patient #{appt.patient_id}",
+        doctor_id=appt.doctor_id,
+        doctor_name=doc.full_name if doc else (f"Dr. {hcp.first_name} {hcp.last_name}" if hcp else "Attending Physician"),
+        hcp_id=appt.hcp_id,
+        hcp_name=f"Dr. {hcp.first_name} {hcp.last_name}" if hcp else None,
+        appointment_date=appt.appointment_date,
+        slot_time=appt.slot_time,
+        appointment_type=appt.appointment_type,
+        reason=appt.reason,
+        status=appt.status,
+        clinical_notes=appt.clinical_notes,
+        diagnosis=appt.diagnosis,
+        created_at=appt.created_at
+    )
+
+@app.put("/api/appointments/{id}/consultation", response_model=schemas.AppointmentOut, tags=["Appointments"])
+def document_consultation(
+    id: int,
+    consult_in: schemas.AppointmentConsultationUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role(["ADMIN", "MEDICAL_DIRECTOR", "DOCTOR"]))
+):
+    appt = db.query(models.Appointment).filter(models.Appointment.id == id).first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    appt.clinical_notes = consult_in.clinical_notes
+    if consult_in.diagnosis:
+        appt.diagnosis = consult_in.diagnosis
+    appt.status = consult_in.status
+    if not appt.doctor_id:
+        appt.doctor_id = current_user.id
+    db.commit()
+    db.refresh(appt)
+
+    pat = db.query(models.User).filter(models.User.id == appt.patient_id).first()
+    return schemas.AppointmentOut(
+        id=appt.id,
+        patient_id=appt.patient_id,
+        patient_name=pat.full_name if pat else f"Patient #{appt.patient_id}",
+        doctor_id=appt.doctor_id,
+        doctor_name=current_user.full_name,
+        hcp_id=appt.hcp_id,
+        appointment_date=appt.appointment_date,
+        slot_time=appt.slot_time,
+        appointment_type=appt.appointment_type,
+        reason=appt.reason,
+        status=appt.status,
+        clinical_notes=appt.clinical_notes,
+        diagnosis=appt.diagnosis,
+        created_at=appt.created_at
+    )
+
+
+# =========================================================
+# Pharmacy Orders & Dispensing Endpoints
+# =========================================================
+@app.post("/api/pharmacy/orders", response_model=schemas.PharmacyOrderOut, tags=["Pharmacy"])
+def place_pharmacy_order(
+    order_in: schemas.PharmacyOrderCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    presc = db.query(models.Prescription).filter(models.Prescription.id == order_in.prescription_id).first()
+    if not presc:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    if current_user.role not in ("ADMIN", "MEDICAL_DIRECTOR") and presc.patient_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized to order from this prescription")
+
+    order_num = f"RX-{datetime.now().strftime('%y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    new_order = models.PharmacyOrder(
+        order_number=order_num,
+        patient_id=current_user.id,
+        prescription_id=order_in.prescription_id,
+        pharmacy_hco_id=order_in.pharmacy_hco_id,
+        delivery_type=order_in.delivery_type,
+        delivery_address=order_in.delivery_address,
+        patient_notes=order_in.patient_notes,
+        schedule_category=presc.schedule_category if presc else "Schedule H",
+        total_amount_inr=float(getattr(presc, "dosage_quantity", 1) or 1) * 150.0,
+        status="Pending Verification"
+    )
+    db.add(new_order)
+    db.commit()
+    db.refresh(new_order)
+
+    pharm = db.query(models.HCO).filter(models.HCO.id == new_order.pharmacy_hco_id).first() if new_order.pharmacy_hco_id else None
+    return schemas.PharmacyOrderOut(
+        id=new_order.id,
+        order_number=new_order.order_number,
+        patient_id=new_order.patient_id,
+        patient_name=current_user.full_name,
+        prescription_id=new_order.prescription_id,
+        medicine_name=presc.medicine_name,
+        dosage_strength=presc.strength,
+        pharmacy_hco_id=new_order.pharmacy_hco_id,
+        pharmacy_name=pharm.name if pharm else "Community Pharmacy",
+        status=new_order.status,
+        delivery_type=new_order.delivery_type,
+        delivery_address=new_order.delivery_address,
+        patient_notes=new_order.patient_notes,
+        pharmacist_notes=new_order.pharmacist_notes,
+        dispensed_at=new_order.dispensed_at,
+        created_at=new_order.created_at
+    )
+
+@app.get("/api/pharmacy/orders", response_model=List[schemas.PharmacyOrderOut], tags=["Pharmacy"])
+def list_pharmacy_orders(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    query = db.query(models.PharmacyOrder)
+    if current_user.role in ("PATIENT", "SALES_REP"):
+        query = query.filter(models.PharmacyOrder.patient_id == current_user.id)
+
+    orders = query.order_by(models.PharmacyOrder.id.desc()).all()
+    out = []
+    for o in orders:
+        pat = db.query(models.User).filter(models.User.id == o.patient_id).first()
+        presc = db.query(models.Prescription).filter(models.Prescription.id == o.prescription_id).first()
+        pharm = db.query(models.HCO).filter(models.HCO.id == o.pharmacy_hco_id).first() if o.pharmacy_hco_id else None
+        out.append(schemas.PharmacyOrderOut(
+            id=o.id,
+            order_number=o.order_number,
+            patient_id=o.patient_id,
+            patient_name=pat.full_name if pat else f"Patient #{o.patient_id}",
+            prescription_id=o.prescription_id,
+            medicine_name=presc.medicine_name if presc else "Prescribed Item",
+            dosage_strength=presc.strength if presc else None,
+            pharmacy_hco_id=o.pharmacy_hco_id,
+            pharmacy_name=pharm.name if pharm else "Community Pharmacy",
+            status=o.status,
+            delivery_type=o.delivery_type,
+            delivery_address=o.delivery_address,
+            patient_notes=o.patient_notes,
+            pharmacist_notes=o.pharmacist_notes,
+            dispensed_at=o.dispensed_at,
+            created_at=o.created_at
+        ))
+    return out
+
+@app.put("/api/pharmacy/orders/{id}/status", response_model=schemas.PharmacyOrderOut, tags=["Pharmacy"])
+def update_pharmacy_order_status(
+    id: int,
+    status_in: schemas.PharmacyOrderStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role(["ADMIN", "PHARMACIST", "MEDICAL_DIRECTOR"]))
+):
+    order = db.query(models.PharmacyOrder).filter(models.PharmacyOrder.id == id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    order.status = status_in.status
+    if status_in.pharmacist_notes:
+        order.pharmacist_notes = status_in.pharmacist_notes
+    if status_in.dispensed_pharmacist_reg_no:
+        order.dispensed_pharmacist_reg_no = status_in.dispensed_pharmacist_reg_no
+    elif getattr(current_user, "pharmacist_reg_no", None):
+        order.dispensed_pharmacist_reg_no = current_user.pharmacist_reg_no
+
+    pat = db.query(models.User).filter(models.User.id == order.patient_id).first()
+    presc = db.query(models.Prescription).filter(models.Prescription.id == order.prescription_id).first()
+    pharm = db.query(models.HCO).filter(models.HCO.id == order.pharmacy_hco_id).first() if order.pharmacy_hco_id else None
+
+    if status_in.status == "Dispensed":
+        order.dispensed_at = datetime.now(timezone.utc)
+        # Automatic Schedule H1 Register Entry per Indian Drug Rules
+        is_h1 = (order.schedule_category == "Schedule H1") or (presc and getattr(presc, "schedule_category", None) == "Schedule H1")
+        if is_h1 and not order.h1_register_logged:
+            prescriber = db.query(models.User).filter(models.User.id == presc.prescriber_id).first() if presc else None
+            h1_entry = models.ScheduleH1Register(
+                order_id=order.id,
+                patient_name=pat.full_name if pat else f"Patient #{order.patient_id}",
+                patient_address=(pat.locality_area or pat.city_town or "Registered Patient Address, India") if pat else "India",
+                prescriber_name=prescriber.full_name if prescriber else "Dr. Registered Medical Practitioner",
+                prescriber_registration_no=getattr(prescriber, "medical_council_reg_no", None) or getattr(presc, "doctor_registration_no", None) or "NMC-2024-5541",
+                prescriber_address=getattr(prescriber, "city_town", None) or "Hospital OPD, India",
+                drug_name=presc.medicine_name if presc else "Schedule H1 Formulation",
+                batch_number=f"IN-B{order.id:04d}",
+                quantity_dispensed=int(getattr(presc, "dosage_quantity", 1) or 1),
+                dispensed_at=datetime.now(timezone.utc),
+                pharmacist_name=current_user.full_name,
+                pharmacist_reg_no=order.dispensed_pharmacist_reg_no or "KA-PH-2024-998"
+            )
+            db.add(h1_entry)
+            order.h1_register_logged = True
+
+    db.commit()
+    db.refresh(order)
+
+    return schemas.PharmacyOrderOut(
+        id=order.id,
+        order_number=order.order_number,
+        patient_id=order.patient_id,
+        patient_name=pat.full_name if pat else f"Patient #{order.patient_id}",
+        prescription_id=order.prescription_id,
+        medicine_name=presc.medicine_name if presc else "Prescribed Item",
+        dosage_strength=presc.strength if presc else None,
+        pharmacy_hco_id=order.pharmacy_hco_id,
+        pharmacy_name=pharm.name if pharm else "Community Pharmacy",
+        schedule_category=order.schedule_category or (presc.schedule_category if presc else "Schedule H"),
+        total_amount_inr=order.total_amount_inr or 0.0,
+        dispensed_pharmacist_reg_no=order.dispensed_pharmacist_reg_no,
+        h1_register_logged=order.h1_register_logged,
+        status=order.status,
+        delivery_type=order.delivery_type,
+        delivery_address=order.delivery_address,
+        patient_notes=order.patient_notes,
+        pharmacist_notes=order.pharmacist_notes,
+        dispensed_at=order.dispensed_at,
+        created_at=order.created_at
+    )
+
+
+# =========================================================
+# Medical Diagnostic Reports Endpoints
+# =========================================================
+@app.post("/api/medical-reports", response_model=schemas.MedicalReportOut, tags=["Medical Reports"])
+def upload_medical_report(
+    report_in: schemas.MedicalReportCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    rep = models.MedicalReport(
+        patient_id=current_user.id,
+        title=report_in.title,
+        report_type=report_in.report_type,
+        report_date=report_in.report_date,
+        file_url=report_in.file_url or "/uploads/reports/sample_report.pdf",
+        file_name=report_in.file_name or f"{report_in.title.replace(' ', '_')}.pdf",
+        file_size_kb=report_in.file_size_kb or 1240.0,
+        test_category=report_in.test_category or "General Diagnostic",
+        biomarkers=report_in.biomarkers,
+        status="Uploaded"
+    )
+    db.add(rep)
+    db.commit()
+    db.refresh(rep)
+
+    return schemas.MedicalReportOut(
+        id=rep.id,
+        patient_id=rep.patient_id,
+        patient_name=current_user.full_name,
+        title=rep.title,
+        report_type=rep.report_type,
+        test_category=rep.test_category,
+        report_date=rep.report_date,
+        file_url=rep.file_url,
+        file_name=rep.file_name,
+        file_size_kb=rep.file_size_kb,
+        biomarkers=rep.biomarkers,
+        clinical_observations=rep.clinical_observations,
+        status=rep.status,
+        reviewed_by_id=rep.reviewed_by_id,
+        reviewed_by_name=None,
+        reviewed_at=rep.reviewed_at,
+        created_at=rep.created_at
+    )
+
+@app.get("/api/medical-reports", response_model=List[schemas.MedicalReportOut], tags=["Medical Reports"])
+def list_medical_reports(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    query = db.query(models.MedicalReport)
+    if current_user.role in ("PATIENT", "SALES_REP"):
+        query = query.filter(models.MedicalReport.patient_id == current_user.id)
+
+    reports = query.order_by(models.MedicalReport.report_date.desc()).all()
+    out = []
+    for r in reports:
+        pat = db.query(models.User).filter(models.User.id == r.patient_id).first()
+        rev = db.query(models.User).filter(models.User.id == r.reviewed_by_id).first() if r.reviewed_by_id else None
+        out.append(schemas.MedicalReportOut(
+            id=r.id,
+            patient_id=r.patient_id,
+            patient_name=pat.full_name if pat else f"Patient #{r.patient_id}",
+            title=r.title,
+            report_type=r.report_type,
+            test_category=r.test_category or "General Diagnostic",
+            report_date=r.report_date,
+            file_url=r.file_url,
+            file_name=r.file_name,
+            file_size_kb=r.file_size_kb,
+            biomarkers=r.biomarkers,
+            clinical_observations=r.clinical_observations,
+            status=r.status,
+            reviewed_by_id=r.reviewed_by_id,
+            reviewed_by_name=rev.full_name if rev else None,
+            reviewed_at=r.reviewed_at,
+            created_at=r.created_at
+        ))
+    return out
+
+@app.put("/api/medical-reports/{id}/review", response_model=schemas.MedicalReportOut, tags=["Medical Reports"])
+def review_medical_report(
+    id: int,
+    review_in: schemas.MedicalReportReviewUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role(["ADMIN", "MEDICAL_DIRECTOR", "DOCTOR"]))
+):
+    rep = db.query(models.MedicalReport).filter(models.MedicalReport.id == id).first()
+    if not rep:
+        raise HTTPException(status_code=404, detail="Medical report not found")
+
+    rep.clinical_observations = review_in.clinical_observations
+    rep.status = review_in.status
+    rep.reviewed_by_id = current_user.id
+    rep.reviewed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(rep)
+
+    pat = db.query(models.User).filter(models.User.id == rep.patient_id).first()
+    return schemas.MedicalReportOut(
+        id=rep.id,
+        patient_id=rep.patient_id,
+        patient_name=pat.full_name if pat else f"Patient #{rep.patient_id}",
+        title=rep.title,
+        report_type=rep.report_type,
+        report_date=rep.report_date,
+        file_url=rep.file_url,
+        file_name=rep.file_name,
+        file_size_kb=rep.file_size_kb,
+        clinical_observations=rep.clinical_observations,
+        status=rep.status,
+        reviewed_by_id=rep.reviewed_by_id,
+        reviewed_by_name=current_user.full_name,
+        reviewed_at=rep.reviewed_at,
+        created_at=rep.created_at
+    )
+
+
+# =========================================================
+# Pharmacy Retail Inventory Endpoints
+# =========================================================
+@app.get("/api/pharmacy/inventory", response_model=List[schemas.PharmacyInventoryOut], tags=["Pharmacy"])
+def list_pharmacy_inventory(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    inv_items = db.query(models.PharmacyInventory).order_by(models.PharmacyInventory.medicine_name.asc()).all()
+    if not inv_items:
+        defaults = [
+            {"medicine_name": "CardioGuard", "generic_name": "Atorvastatin Calcium", "strength": "20mg", "dosage_form": "Tablet", "stock_quantity": 140, "unit_price": 24.50, "lot_number": "LOT-CG-2026A", "expiry_date": "2027-12-31", "status": "In Stock"},
+            {"medicine_name": "AmoxiClav", "generic_name": "Amoxicillin + Potassium Clavulanate", "strength": "625mg", "dosage_form": "Tablet", "stock_quantity": 85, "unit_price": 18.20, "lot_number": "LOT-AC-2026B", "expiry_date": "2027-08-15", "status": "In Stock"},
+            {"medicine_name": "GlucoFlow", "generic_name": "Metformin Hydrochloride", "strength": "500mg", "dosage_form": "Tablet", "stock_quantity": 210, "unit_price": 12.00, "lot_number": "LOT-GF-2026C", "expiry_date": "2028-03-30", "status": "In Stock"},
+            {"medicine_name": "NeuroCalm", "generic_name": "Escitalopram Oxalate", "strength": "10mg", "dosage_form": "Tablet", "stock_quantity": 15, "unit_price": 31.75, "lot_number": "LOT-NC-2025Z", "expiry_date": "2026-12-01", "status": "Low Stock"},
+            {"medicine_name": "RespiClear", "generic_name": "Fluticasone Propionate", "strength": "50mcg", "dosage_form": "Inhaler", "stock_quantity": 42, "unit_price": 45.00, "lot_number": "LOT-RC-2026D", "expiry_date": "2027-11-20", "status": "In Stock"},
+        ]
+        first_pharm = db.query(models.HCO).filter(models.HCO.type == "Pharmacy").first()
+        for d in defaults:
+            item = models.PharmacyInventory(
+                hco_id=first_pharm.id if first_pharm else None,
+                **d
+            )
+            db.add(item)
+        db.commit()
+        inv_items = db.query(models.PharmacyInventory).all()
+
+    out = []
+    for item in inv_items:
+        pharm = db.query(models.HCO).filter(models.HCO.id == item.hco_id).first() if item.hco_id else None
+        out.append(schemas.PharmacyInventoryOut(
+            id=item.id,
+            hco_id=item.hco_id,
+            pharmacy_name=pharm.name if pharm else "Community Pharmacy",
+            medicine_name=item.medicine_name,
+            generic_name=item.generic_name,
+            strength=item.strength,
+            dosage_form=item.dosage_form,
+            schedule_category=item.schedule_category or "Schedule H",
+            stock_quantity=item.stock_quantity,
+            reorder_level=item.reorder_level,
+            unit_price=item.unit_price,
+            mrp_inr=item.mrp_inr or (item.unit_price * 1.25),
+            mfg_date=item.mfg_date,
+            lot_number=item.lot_number,
+            expiry_date=item.expiry_date,
+            status=item.status,
+            created_at=item.created_at
+        ))
+    return out
+
+@app.post("/api/pharmacy/inventory", response_model=schemas.PharmacyInventoryOut, tags=["Pharmacy"])
+def create_pharmacy_inventory(
+    inv_in: schemas.PharmacyInventoryCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role(["ADMIN", "PHARMACIST"]))
+):
+    item = models.PharmacyInventory(**inv_in.model_dump())
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    pharm = db.query(models.HCO).filter(models.HCO.id == item.hco_id).first() if item.hco_id else None
+    return schemas.PharmacyInventoryOut(
+        id=item.id,
+        hco_id=item.hco_id,
+        pharmacy_name=pharm.name if pharm else "Community Pharmacy",
+        medicine_name=item.medicine_name,
+        generic_name=item.generic_name,
+        strength=item.strength,
+        dosage_form=item.dosage_form,
+        schedule_category=item.schedule_category or "Schedule H",
+        stock_quantity=item.stock_quantity,
+        reorder_level=item.reorder_level,
+        unit_price=item.unit_price,
+        mrp_inr=item.mrp_inr or (item.unit_price * 1.25),
+        mfg_date=item.mfg_date,
+        lot_number=item.lot_number,
+        expiry_date=item.expiry_date,
+        status=item.status,
+        created_at=item.created_at
+    )
+
+@app.put("/api/pharmacy/inventory/{id}", response_model=schemas.PharmacyInventoryOut, tags=["Pharmacy"])
+def update_pharmacy_inventory(
+    id: int,
+    inv_up: schemas.PharmacyInventoryUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role(["ADMIN", "PHARMACIST"]))
+):
+    item = db.query(models.PharmacyInventory).filter(models.PharmacyInventory.id == id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+
+    if inv_up.stock_quantity is not None:
+        item.stock_quantity = inv_up.stock_quantity
+        if item.stock_quantity <= 0:
+            item.status = "Out of Stock"
+        elif item.stock_quantity <= item.reorder_level:
+            item.status = "Low Stock"
+        else:
+            item.status = "In Stock"
+    if inv_up.unit_price is not None:
+        item.unit_price = inv_up.unit_price
+    if inv_up.status is not None:
+        item.status = inv_up.status
+    if inv_up.reorder_level is not None:
+        item.reorder_level = inv_up.reorder_level
+
+    db.commit()
+    db.refresh(item)
+
+    pharm = db.query(models.HCO).filter(models.HCO.id == item.hco_id).first() if item.hco_id else None
+    return schemas.PharmacyInventoryOut(
+        id=item.id,
+        hco_id=item.hco_id,
+        pharmacy_name=pharm.name if pharm else "Community Pharmacy",
+        medicine_name=item.medicine_name,
+        generic_name=item.generic_name,
+        strength=item.strength,
+        dosage_form=item.dosage_form,
+        schedule_category=item.schedule_category or "Schedule H",
+        stock_quantity=item.stock_quantity,
+        reorder_level=item.reorder_level,
+        unit_price=item.unit_price,
+        mrp_inr=item.mrp_inr or (item.unit_price * 1.25),
+        mfg_date=item.mfg_date,
+        lot_number=item.lot_number,
+        expiry_date=item.expiry_date,
+        status=item.status,
+        created_at=item.created_at
+    )
+
+
+# ---------------------------------------------------------
+# Indian Statutory Schedule H1 Register Endpoint
+# ---------------------------------------------------------
+@app.get("/api/pharmacy/schedule-h1-register", response_model=List[schemas.ScheduleH1RegisterOut], tags=["Pharmacy"])
+def get_schedule_h1_register(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role(["ADMIN", "PHARMACIST"]))
+):
+    registers = db.query(models.ScheduleH1Register).order_by(models.ScheduleH1Register.dispensed_at.desc()).all()
+    return registers
+
+
+# ---------------------------------------------------------
+# Indian Doctor-Patient Multilingual AI Consultation Endpoint
+# ---------------------------------------------------------
+@app.post("/api/ai/doctor-consultation", response_model=schemas.DoctorPatientConsultationAIResponse, tags=["Consultations"])
+def doctor_consultation_ai(
+    req: schemas.DoctorPatientConsultationAIRequest,
+    current_user: models.User = Depends(get_current_user)
+):
+    from services.ai_service import generate_indian_doctor_consultation
+    result = generate_indian_doctor_consultation(
+        patient_message=req.patient_message,
+        language=req.language,
+        patient_age=req.patient_age,
+        patient_gender=req.patient_gender,
+        current_symptoms=req.current_symptoms,
+        history=req.history
+    )
+    return result
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", host=settings.HOST, port=settings.PORT, reload=True)
+

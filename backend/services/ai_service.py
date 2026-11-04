@@ -247,3 +247,170 @@ def fallback_assistant(message: str, interaction: dict, history: list) -> Dict[s
             "generated": general_reply,
             "ai_meta": {"disclaimer": AI_DISCLAIMER}
         }
+
+
+# ---------------------------------------------------------------------------
+# Indian Doctor-Patient Multilingual Consultation Engine
+# ---------------------------------------------------------------------------
+
+INDIAN_LANGUAGE_GREETINGS = {
+    "English": "Namaskara! How are you feeling today? Since when have you been experiencing these symptoms?",
+    "Hindi": "नमस्ते! आज आप कैसा महसूस कर रहे हैं? क्या आपने पास के मेडिकल स्टोर से कोई दवा ली है?",
+    "Kannada": "ನಮಸ್ಕಾರ! ಇಂದು ನಿಮಗೆ ಹೇಗನಿಸುತ್ತಿದೆ? ಈ ಲಕ್ಷಣಗಳು ಯಾವಾಗ ಪ್ರಾರಂಭವಾಯಿತು?",
+    "Tamil": "வணக்கம்! இன்று உங்கள் உடல்நிலை எப்படி உள்ளது? அருகிலுள்ள மருந்தகத்தில் ஏதேனும் மருந்து வாங்கினீர்களா?",
+    "Telugu": "నమస్కారం! ఈ రోజు మీకు ఎలా ఉంది? ఇటీవల మీరు ఏదైనా రక్త పరీక్ష చేయించుకున్నారా?",
+    "Malayalam": "നമസ്കാരം! ഇപ്പോൾ എങ്ങനെയുണ്ട്? മുൻപ് എന്തെങ്കിലും മരുന്നുകൾ കഴിച്ചിട്ടുണ്ടോ?",
+    "Marathi": "नमस्कार! आज तुम्हाला कसे वाटत आहे? जवळच्या मेडिकलमधून काही औषध घेतले आहे का?",
+    "Bengali": "নমস্কার! আজ আপনি কেমন বোধ করছেন? সম্প্রতি কোনো রক্ত পরীক্ষা করিয়েছেন?"
+}
+
+def generate_indian_doctor_consultation(
+    patient_message: str,
+    language: str = "English",
+    patient_age: Optional[int] = None,
+    patient_gender: Optional[str] = None,
+    current_symptoms: Optional[str] = None,
+    history: Optional[list] = None
+) -> Dict[str, Any]:
+    """
+    Generates polite, professional Indian clinical doctor-patient dialogues
+    in the patient's chosen language, and preserves a clean English clinical summary.
+    """
+    lang = language.strip().title() if language else "English"
+    if lang not in INDIAN_LANGUAGE_GREETINGS:
+        lang = "English"
+
+    msg_lower = patient_message.lower()
+    
+    # Extract symptoms heuristic supporting Romanized & native Indic scripts
+    extracted_symptoms = []
+    if any(w in msg_lower for w in ["fever", "bukhar", "jwara", "kaichal", "बुखार", "ताप", "ಜ್ವರ", "காய்ச்சல்", "జ్వరం", "പനി", "জ্বর"]):
+        extracted_symptoms.append("Pyrexia (Fever)")
+    if any(w in msg_lower for w in ["cough", "khansi", "kemu", "irumal", "खांसी", "खोकला", "ಕೆಮ್ಮು", "இருமல்", "దగ్గు", "ചുമ", "কাশি"]):
+        extracted_symptoms.append("Cough (Tussis)")
+    if any(w in msg_lower for w in ["throat", "gala", "thonda", "tonde", "गला", "गले", "घसा", "ಗಂಟಲು", "தொண்டை", "గొంతు", "തൊണ്ട", "গলা"]):
+        extracted_symptoms.append("Sore Throat / Pharyngitis")
+    if any(w in msg_lower for w in ["headache", "sir dard", "thalenovu", "thala vali", "सिरदर्द", "डोकेदुखी", "ತಲೆನೋವು", "தலைவலி", "తలనొప్పి", "തലവേദന", "মাথাব্যথা"]):
+        extracted_symptoms.append("Cephalea (Headache)")
+    if any(w in msg_lower for w in ["stomach", "pet dard", "pottenovu", "vayiru vali", "पेट दर्द", "पोटदुखी", "ಹೊಟ್ಟೆನೋವು", "വയറുവേദന", "পেট ব্যথা"]):
+        extracted_symptoms.append("Abdominal Discomfort")
+    if any(w in msg_lower for w in ["bp", "pressure", "blood pressure"]):
+        extracted_symptoms.append("Blood Pressure Elevation Concern")
+    if any(w in msg_lower for w in ["sugar", "diabetes", "meetha"]):
+        extracted_symptoms.append("Blood Glucose Regulation Inquiry")
+
+    if not extracted_symptoms:
+        extracted_symptoms.append(current_symptoms or "General Outpatient Symptom Evaluation")
+
+    # Suggested diagnostic investigations
+    suggested_investigations = []
+    if "Pyrexia (Fever)" in extracted_symptoms:
+        suggested_investigations.extend(["Complete Blood Count (CBC)", "Peripheral Blood Smear for Malaria", "Widal / Typhidot Test"])
+    if "Blood Glucose Regulation Inquiry" in extracted_symptoms:
+        suggested_investigations.extend(["Fasting Blood Sugar (FBS)", "Post-Prandial Blood Sugar (PPBS)", "HbA1c"])
+    if "Blood Pressure Elevation Concern" in extracted_symptoms:
+        suggested_investigations.extend(["Serum Creatinine", "Lipid Profile", "ECG"])
+    if not suggested_investigations:
+        suggested_investigations.extend(["Vitals Check (BP, Pulse, Temperature in °C)", "Complete Blood Count (CBC)"])
+
+    # Prescribing cautions per Indian regulatory guidelines
+    prescribing_cautions = [
+        "Inquire regarding prior drug allergies (Penicillin, Sulfa, NSAIDs).",
+        "Verify if any OTC medicines were purchased from a local chemist.",
+        "Ensure generic name is written in CAPITALS per NMC 2023 regulations."
+    ]
+
+    # Clinical English Summary for Physician
+    clinical_summary = (
+        f"Patient presented with complaints of: {', '.join(extracted_symptoms)}. "
+        f"Language used: {lang}. "
+        f"Reported symptoms: '{patient_message.strip()}'. "
+        f"Recommended physical examination, vitals measurement in °C/mmHg, and baseline lab work: {', '.join(suggested_investigations)}."
+    )
+
+    # Vernacular and English Doctor Responses
+    replies_by_lang = {
+        "English": (
+            f"Namaskara. I understand you are experiencing {', '.join(extracted_symptoms).lower()}. "
+            "Since when have you been having these symptoms? Have you taken any tablets from a nearby medical store, "
+            "or do you have any known drug allergies?"
+        ),
+        "Hindi": (
+            f"नमस्ते। मैं समझ सकता हूँ कि आपको परेशानी हो रही है। "
+            "यह लक्षण आपको कितने दिनों से हैं? क्या आपने पास के किसी मेडिकल स्टोर से कोई दवा ली है, "
+            "और क्या आपको किसी दवा से कोई एलर्जी है?"
+        ),
+        "Kannada": (
+            f"ನಮಸ್ಕಾರ. ನಿಮಗೆ ಸಮಸ್ಯೆ ಇರುವುದು ಅರ್ಥವಾಗುತ್ತದೆ. "
+            "ಈ ಲಕ್ಷಣಗಳು ಎಷ್ಟು ದಿನಗಳಿಂದ ಇವೆ? ಹತ್ತಿರದ ಮೆಡಿಕಲ್ ಶಾಪ್‌ನಿಂದ ಯಾವುದೇ ಮಾತ್ರೆ ತೆಗೆದುಕೊಂಡಿದ್ದೀರಾ? "
+            "ಮತ್ತು ನಿಮಗೆ ಯಾವುದೇ ಔಷಧಿಯ ಅಲರ್ಜಿ ಇದೆಯೇ?"
+        ),
+        "Tamil": (
+            f"வணக்கம். உங்கள் உடல்நிலை அசௌகரியம் புரிகிறது. "
+            "இந்த அறிகுறிகள் எத்தனை நாட்களாக உள்ளன? அருகிலுள்ள மெடிக்கல் கடையில் ஏதேனும் மாத்திரை வாங்கினீர்களா? "
+            "உங்களுக்கு ஏதேனும் மருந்து ஒவ்வாமை (Allergy) உள்ளதா?"
+        ),
+        "Telugu": (
+            f"నమస్కారం. మీ సమస్యను నేను అర్థం చేసుకోగలను. "
+            "ఈ లక్షణాలు ఎన్ని రోజుల నుండి ఉన్నాయి? దగ్గరలోని మెడికల్ షాప్ నుండి ఏదైనా మందు తీసుకున్నారా? "
+            "మరియు మీకు ఏవైనా డ్రగ్ అలర్జీలు ఉన్నాయా?"
+        ),
+        "Malayalam": (
+            f"നമസ്കാരം. നിങ്ങളുടെ ബുദ്ധിമുട്ട് മനസ്സിലാക്കുന്നു. "
+            "ഈ ലക്ഷണങ്ങൾ എത്ര ദിവസമായി ഉണ്ട്? അടുത്തുള്ള മെഡിക്കൽ സ്റ്റോറിൽ നിന്ന് എന്തെങ്കിലും മരുന്ന് കഴിച്ചിട്ടുണ്ടോ? "
+            "നിങ്ങൾക്ക് എന്തെങ്കിലും മരുന്ന് അലർജി ഉണ്ടോ?"
+        ),
+        "Marathi": (
+            f"नमस्कार. मला समजते की आपल्याला त्रास होत आहे. "
+            "ही लक्षणे तुम्हाला किती दिवसांपासून जाणवत आहेत? जवळच्या मेडिकल स्टोअरमधून काही औषध घेतले आहे का? "
+            "आणि तुम्हाला कोणत्याही औषधाची ऍलर्जी आहे का?"
+        ),
+        "Bengali": (
+            f"নমস্কার। আমি বুঝতে পারছি আপনার কষ্ট হচ্ছে। "
+            "এই উপসর্গগুলি আপনার কতদিন ধরে হচ্ছে? কাছের কোনো ওষুধের দোকান থেকে কোনো ওষুধ খেয়েছেন কি? "
+            "আর আপনার কোনো ওষুধে অ্যালার্জি আছে কি?"
+        )
+    }
+
+    doctor_reply_vernacular = replies_by_lang.get(lang, replies_by_lang["English"])
+    doctor_reply_english = replies_by_lang["English"]
+
+    # Try external LLM via Groq if configured
+    client = get_groq_client()
+    if client:
+        try:
+            sys_prompt = (
+                f"You are a licensed Indian Registered Medical Practitioner (Doctor). "
+                f"The patient is speaking in {lang}. Respond with polite Indian healthcare etiquette. "
+                f"Ask natural clinical questions (duration, prior chemist purchases, drug allergies). "
+                f"Respond in {lang} and generate a clinical English summary. "
+                f"Return JSON with keys: doctor_reply_vernacular, doctor_reply_english, clinical_summary_english."
+            )
+            chat_resp = client.chat.completions.create(
+                model=settings.GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": patient_message}
+                ],
+                temperature=0.3,
+                max_tokens=500
+            )
+            content = chat_resp.choices[0].message.content or ""
+            parsed = clean_json_output(content)
+            if "doctor_reply_vernacular" in parsed:
+                doctor_reply_vernacular = parsed["doctor_reply_vernacular"]
+                doctor_reply_english = parsed.get("doctor_reply_english", doctor_reply_english)
+                clinical_summary = parsed.get("clinical_summary_english", clinical_summary)
+        except Exception as e:
+            logger.info("Using deterministic Indian consultation fallback: %s", e)
+
+    return {
+        "language": lang,
+        "doctor_reply_vernacular": doctor_reply_vernacular,
+        "doctor_reply_english": doctor_reply_english,
+        "clinical_summary_english": clinical_summary,
+        "extracted_symptoms": extracted_symptoms,
+        "suggested_investigations": suggested_investigations,
+        "prescribing_cautions": prescribing_cautions
+    }
+

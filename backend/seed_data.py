@@ -102,12 +102,16 @@ def seed():
 
         # 3. Healthcare Organizations (HCOs)
         hcos_data = [
-            {"name": "Memorial Sloan Kettering Cancer Center", "type": "Hospital", "territory_id": territories_map["North-East Region"], "city": "New York", "state": "NY", "postal_code": "10065", "phone": "+1 (212) 639-2000", "bed_count": 514, "purchasing_tier": "Tier 1"},
-            {"name": "Mount Sinai Health System", "type": "Academic Medical Center", "territory_id": territories_map["North-East Region"], "city": "New York", "state": "NY", "postal_code": "10029", "phone": "+1 (212) 241-6500", "bed_count": 1134, "purchasing_tier": "Tier 1"},
-            {"name": "Mayo Clinic Hospital", "type": "Hospital", "territory_id": territories_map["Mid-West Region"], "city": "Rochester", "state": "MN", "postal_code": "55905", "phone": "+1 (507) 284-2511", "bed_count": 1265, "purchasing_tier": "Tier 1"},
-            {"name": "Cleveland Clinic Main Campus", "type": "Academic Medical Center", "territory_id": territories_map["Mid-West Region"], "city": "Cleveland", "state": "OH", "postal_code": "44195", "phone": "+1 (216) 444-2200", "bed_count": 1400, "purchasing_tier": "Tier 1"},
-            {"name": "Cedars-Sinai Medical Center", "type": "Hospital", "territory_id": territories_map["West Coast Region"], "city": "Los Angeles", "state": "CA", "postal_code": "90048", "phone": "+1 (310) 423-3277", "bed_count": 886, "purchasing_tier": "Tier 1"},
-            {"name": "Northwestern Memorial Hospital", "type": "Hospital", "territory_id": territories_map["Mid-West Region"], "city": "Chicago", "state": "IL", "postal_code": "60611", "phone": "+1 (312) 926-2000", "bed_count": 894, "purchasing_tier": "Tier 2"}
+            {"name": "Memorial Sloan Kettering Cancer Center", "type": "Hospital", "territory_id": territories_map["North-East Region"], "city": "New York", "state": "NY", "postal_code": "10065", "address": "1275 York Ave", "phone": "+1 (212) 639-2000", "bed_count": 514, "purchasing_tier": "Tier 1", "latitude": 40.7635, "longitude": -73.9575, "operating_hours": "24/7 Emergency & Inpatient"},
+            {"name": "Mount Sinai Health System", "type": "Academic Medical Center", "territory_id": territories_map["North-East Region"], "city": "New York", "state": "NY", "postal_code": "10029", "address": "1468 Madison Ave", "phone": "+1 (212) 241-6500", "bed_count": 1134, "purchasing_tier": "Tier 1", "latitude": 40.7900, "longitude": -73.9530, "operating_hours": "24/7 Emergency & Clinic 07:00-19:00"},
+            {"name": "Mayo Clinic Hospital", "type": "Hospital", "territory_id": territories_map["Mid-West Region"], "city": "Rochester", "state": "MN", "postal_code": "55905", "address": "1216 2nd St SW", "phone": "+1 (507) 284-2511", "bed_count": 1265, "purchasing_tier": "Tier 1", "latitude": 44.0225, "longitude": -92.4666, "operating_hours": "24/7 Open"},
+            {"name": "Cleveland Clinic Main Campus", "type": "Academic Medical Center", "territory_id": territories_map["Mid-West Region"], "city": "Cleveland", "state": "OH", "postal_code": "44195", "address": "9500 Euclid Ave", "phone": "+1 (216) 444-2200", "bed_count": 1400, "purchasing_tier": "Tier 1", "latitude": 41.5034, "longitude": -81.6214, "operating_hours": "24/7 Open"},
+            {"name": "Cedars-Sinai Medical Center", "type": "Hospital", "territory_id": territories_map["West Coast Region"], "city": "Los Angeles", "state": "CA", "postal_code": "90048", "address": "8700 Beverly Blvd", "phone": "+1 (310) 423-3277", "bed_count": 886, "purchasing_tier": "Tier 1", "latitude": 34.0760, "longitude": -118.3800, "operating_hours": "24/7 Open"},
+            {"name": "Northwestern Memorial Hospital", "type": "Hospital", "territory_id": territories_map["Mid-West Region"], "city": "Chicago", "state": "IL", "postal_code": "60611", "address": "251 E Huron St", "phone": "+1 (312) 926-2000", "bed_count": 894, "purchasing_tier": "Tier 2", "latitude": 41.8948, "longitude": -87.6206, "operating_hours": "24/7 Open"},
+            {"name": "MedIntel Express Pharmacy", "type": "Pharmacy", "territory_id": territories_map["North-East Region"], "city": "New York", "state": "NY", "postal_code": "10022", "address": "620 Lexington Ave", "phone": "+1 (212) 555-0199", "bed_count": 0, "purchasing_tier": "Tier 2", "latitude": 40.7592, "longitude": -73.9712, "operating_hours": "Mon-Sat: 08:00 AM - 10:00 PM, Sun: 09:00 AM - 07:00 PM"},
+            {"name": "Metropolitan Health Clinic", "type": "Clinic", "territory_id": territories_map["North-East Region"], "city": "New York", "state": "NY", "postal_code": "10021", "address": "345 E 72nd St", "phone": "+1 (212) 555-0144", "bed_count": 25, "purchasing_tier": "Tier 2", "latitude": 40.7684, "longitude": -73.9559, "operating_hours": "Mon-Fri: 08:00 AM - 06:00 PM"},
+            {"name": "Premier Community Pharmacy", "type": "Pharmacy", "territory_id": territories_map["North-East Region"], "city": "New York", "state": "NY", "postal_code": "10028", "address": "1530 2nd Ave", "phone": "+1 (212) 555-0188", "bed_count": 0, "purchasing_tier": "Tier 3", "latitude": 40.7738, "longitude": -73.9535, "operating_hours": "Mon-Sat: 08:30 AM - 09:00 PM"},
+            {"name": "Downtown Family Medical Clinic", "type": "Clinic", "territory_id": territories_map["North-East Region"], "city": "New York", "state": "NY", "postal_code": "10003", "address": "10 Union Square E", "phone": "+1 (212) 555-0177", "bed_count": 15, "purchasing_tier": "Tier 2", "latitude": 40.7350, "longitude": -73.9900, "operating_hours": "Mon-Fri: 09:00 AM - 05:00 PM"}
         ]
         hcos_map = {}
         for h_info in hcos_data:
@@ -118,6 +122,8 @@ def seed():
                 db.flush()
                 hcos_map[h_info["name"]] = h.id
             else:
+                for k, v in h_info.items():
+                    setattr(existing, k, v)
                 hcos_map[h_info["name"]] = existing.id
 
         # 4. Pharmaceutical Products
@@ -435,7 +441,107 @@ def seed():
             if not existing:
                 db.add(models.CRMConfig(**cfg))
 
-        # 11. Initial Audit Log
+        # 11. Sample Prescriptions & Schedules for Authenticated User
+        admin_user = db.query(models.User).filter(models.User.email == "admin@medintelcrm.com").first()
+        doc_user = db.query(models.User).filter(models.User.email == "medical.director@medintelcrm.com").first()
+        cardio_prod = db.query(models.Product).filter(models.Product.brand_name == "CardioGuard").first()
+        gluco_prod = db.query(models.Product).filter(models.Product.brand_name == "GlucoFlow").first()
+        neuro_prod = db.query(models.Product).filter(models.Product.brand_name == "NeuroCalm").first()
+
+        if admin_user and doc_user:
+            prescriptions_data = [
+                {
+                    "patient_id": admin_user.id,
+                    "prescriber_id": doc_user.id,
+                    "product_id": cardio_prod.id if cardio_prod else None,
+                    "medicine_name": "CardioGuard",
+                    "generic_name": "Atorvastatin Calcium",
+                    "strength": "20mg",
+                    "dosage_quantity": 1.0,
+                    "dosage_unit": "Tablet",
+                    "frequency": "Once Daily",
+                    "scheduled_times": ["Morning"],
+                    "start_date": (now - timedelta(days=7)).date(),
+                    "end_date": (now + timedelta(days=60)).date(),
+                    "food_instruction": "After Food",
+                    "instructions": "Take 1 tablet every morning with water after breakfast.",
+                    "status": "Active"
+                },
+                {
+                    "patient_id": admin_user.id,
+                    "prescriber_id": doc_user.id,
+                    "product_id": gluco_prod.id if gluco_prod else None,
+                    "medicine_name": "GlucoFlow",
+                    "generic_name": "Empagliflozin",
+                    "strength": "10mg",
+                    "dosage_quantity": 1.0,
+                    "dosage_unit": "Tablet",
+                    "frequency": "Twice Daily",
+                    "scheduled_times": ["Morning", "Evening"],
+                    "start_date": (now - timedelta(days=7)).date(),
+                    "end_date": (now + timedelta(days=30)).date(),
+                    "food_instruction": "With Food",
+                    "instructions": "Take with morning and evening meals.",
+                    "status": "Active"
+                },
+                {
+                    "patient_id": admin_user.id,
+                    "prescriber_id": doc_user.id,
+                    "product_id": neuro_prod.id if neuro_prod else None,
+                    "medicine_name": "NeuroCalm",
+                    "generic_name": "Duloxetine HCl",
+                    "strength": "30mg",
+                    "dosage_quantity": 1.0,
+                    "dosage_unit": "Capsule",
+                    "frequency": "Once Daily",
+                    "scheduled_times": ["Night"],
+                    "start_date": (now - timedelta(days=7)).date(),
+                    "end_date": (now + timedelta(days=45)).date(),
+                    "food_instruction": "Before Sleep",
+                    "instructions": "Take at night before sleep. Do not consume alcohol.",
+                    "status": "Active"
+                }
+            ]
+
+            today = now.date()
+            for p_data in prescriptions_data:
+                p_existing = db.query(models.Prescription).filter(
+                    models.Prescription.patient_id == p_data["patient_id"],
+                    models.Prescription.medicine_name == p_data["medicine_name"]
+                ).first()
+                if not p_existing:
+                    p = models.Prescription(**p_data)
+                    db.add(p)
+                    db.flush()
+                    p_id = p.id
+                else:
+                    p_id = p_existing.id
+
+                # Generate dose schedule logs for today
+                slot_times = {
+                    "Morning": "08:00",
+                    "Afternoon": "13:00",
+                    "Evening": "18:00",
+                    "Night": "21:00"
+                }
+                for slot in p_data["scheduled_times"]:
+                    log_existing = db.query(models.MedicationScheduleLog).filter(
+                        models.MedicationScheduleLog.prescription_id == p_id,
+                        models.MedicationScheduleLog.scheduled_date == today,
+                        models.MedicationScheduleLog.scheduled_slot == slot
+                    ).first()
+                    if not log_existing:
+                        db.add(models.MedicationScheduleLog(
+                            prescription_id=p_id,
+                            user_id=admin_user.id,
+                            scheduled_date=today,
+                            scheduled_slot=slot,
+                            scheduled_time=slot_times.get(slot, "08:00"),
+                            status="Scheduled",
+                            is_verified=False
+                        ))
+
+        # 12. Initial Audit Log
         existing_log = db.query(models.AuditLog).first()
         if not existing_log:
             db.add(models.AuditLog(

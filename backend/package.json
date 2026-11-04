@@ -1,4 +1,14 @@
 {
+  "name": "pharma-crm-backend",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Enterprise AI Pharmaceutical CRM Backend",
+  "scripts": {
+    "dev": "python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload",
+    "start": "python -m uvicorn app:app --host 0.0.0.0 --port 8000",
+    "seed": "python seed_data.py",
+    "test": "pytest tests/test_api.py -v"
+  },
   "dependencies": {
     "axios": "^1.18.1"
   }

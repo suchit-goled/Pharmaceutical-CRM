@@ -1,0 +1,16 @@
+{
+  "name": "pharma-crm",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Enterprise AI Pharmaceutical CRM - Field Detailing, HCP Relationships & Compliance Platform",
+  "scripts": {
+    "dev": "npm run dev:frontend",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload",
+    "start:backend": "cd backend && python -m uvicorn app:app --host 0.0.0.0 --port 8000",
+    "build": "cd frontend && npm run build",
+    "test:backend": "cd backend && python -m pytest tests/test_api.py -v",
+    "seed": "cd backend && python seed_data.py"
+  }
+}
+
