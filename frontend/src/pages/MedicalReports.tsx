@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import Sidebar from "../components/layout/Sidebar";
-import Header from "../components/layout/Header";
+import DashboardLayout from "../layouts/DashboardLayout";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import api from "../services/api";
@@ -142,19 +141,15 @@ export default function MedicalReports() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-100">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <Header
-          title={isDoctor ? "Patient Diagnostic Reports Review" : "Diagnostic Medical Reports"}
-          subtitle={
-            isDoctor
-              ? "Review patient-submitted diagnostic lab tests, Indian biomarker standards (mg/dL, mmHg, °C) and clinical observations"
-              : "Upload lab tests, diagnostic scans, and clinical summaries with standard Indian clinical units for doctor review"
-          }
-        />
-
-        <main className="p-4 md:p-8 space-y-6">
+    <DashboardLayout
+      title={isDoctor ? "Patient Diagnostic Reports Review" : "Diagnostic Medical Reports"}
+      subtitle={
+        isDoctor
+          ? "Review patient-submitted diagnostic lab tests, Indian biomarker standards (mg/dL, mmHg, °C) and clinical observations"
+          : "Upload lab tests, diagnostic scans, and clinical summaries with standard Indian clinical units for doctor review"
+      }
+    >
+      <div className="space-y-6">
           {/* Action Bar */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div>
@@ -323,8 +318,6 @@ export default function MedicalReports() {
               })}
             </div>
           )}
-        </main>
-      </div>
 
       {/* Upload Modal (Patient) */}
       {showUploadModal && (
@@ -499,6 +492,7 @@ export default function MedicalReports() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

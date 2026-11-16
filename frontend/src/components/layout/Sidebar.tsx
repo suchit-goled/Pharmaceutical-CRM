@@ -26,9 +26,29 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, logout, isAdmin, isDoctor, isPatient, isPharmacist } = useAuth();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  const isControlled = isOpen !== undefined;
+  const isDrawerOpen = isControlled ? isOpen : internalOpen;
+  const handleClose = () => {
+    if (isControlled && onClose) {
+      onClose();
+    } else {
+      setInternalOpen(false);
+    }
+  };
+  const handleOpen = () => {
+    if (!isControlled) {
+      setInternalOpen(true);
+    }
+  };
 
   // Determine navigation items by role
   let navItems: { to: string; icon: any; label: string }[] = [];
@@ -127,8 +147,9 @@ export default function Sidebar() {
         </div>
         {/* Mobile close button */}
         <button
-          onClick={() => setMobileOpen(false)}
+          onClick={handleClose}
           className="md:hidden p-2 text-slate-400 hover:text-slate-700 rounded-lg"
+          title="Close Navigation Menu"
         >
           <X size={20} />
         </button>
@@ -145,7 +166,7 @@ export default function Sidebar() {
             <NavLink
               key={item.to}
               to={item.to}
-              onClick={() => setMobileOpen(false)}
+              onClick={handleClose}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
                   isActive
@@ -171,7 +192,7 @@ export default function Sidebar() {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  onClick={() => setMobileOpen(false)}
+                  onClick={handleClose}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
                       isActive
@@ -219,14 +240,16 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile Hamburger Floating Button */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className="md:hidden fixed top-5 left-4 z-40 p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg hover:bg-indigo-700 transition"
-        title="Open Navigation Menu"
-      >
-        <Menu size={20} />
-      </button>
+      {/* Mobile Hamburger Floating Button fallback if not controlled */}
+      {!isControlled && (
+        <button
+          onClick={handleOpen}
+          className="md:hidden fixed top-5 left-4 z-40 p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg hover:bg-indigo-700 transition"
+          title="Open Navigation Menu"
+        >
+          <Menu size={20} />
+        </button>
+      )}
 
       {/* Desktop Static Sidebar */}
       <aside className="hidden md:flex w-72 border-r border-slate-200 flex-col h-screen shrink-0">
@@ -234,12 +257,12 @@ export default function Sidebar() {
       </aside>
 
       {/* Mobile Off-Canvas Drawer */}
-      {mobileOpen && (
+      {isDrawerOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
-            onClick={() => setMobileOpen(false)}
+            onClick={handleClose}
           />
           {/* Drawer Body */}
           <div className="relative w-72 max-w-[80vw] h-full shadow-2xl z-10 flex flex-col">

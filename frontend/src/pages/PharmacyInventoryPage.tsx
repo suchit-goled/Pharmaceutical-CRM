@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import Sidebar from "../components/layout/Sidebar";
-import Header from "../components/layout/Header";
+import DashboardLayout from "../layouts/DashboardLayout";
 import { useToast } from "../context/ToastContext";
 import api from "../services/api";
 import {
@@ -11,9 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   FileSpreadsheet,
-  ShieldCheck,
-  Building2,
-  Calendar
+  ShieldCheck
 } from "lucide-react";
 
 interface InventoryItem {
@@ -174,15 +171,11 @@ export default function PharmacyInventoryPage() {
   const outOfStockCount = inventory.filter((i) => i.status === "Out of Stock").length;
 
   return (
-    <div className="flex h-screen bg-slate-100">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <Header
-          title="Pharmacy Retail Inventory & Stock Management"
-          subtitle="Real-time pharmaceutical dispensary stock levels, batch lots, CDSCO Schedules, and statutory H1 register"
-        />
-
-        <main className="p-4 md:p-8 space-y-6">
+    <DashboardLayout
+      title="Pharmacy Retail Inventory & Stock Management"
+      subtitle="Real-time pharmaceutical dispensary stock levels, batch lots, CDSCO Schedules, and statutory H1 register"
+    >
+      <div className="space-y-6">
           {/* Top Metric Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
@@ -364,8 +357,6 @@ export default function PharmacyInventoryPage() {
               </div>
             </div>
           )}
-        </main>
-      </div>
 
       {/* Adjust Stock Modal */}
       {selectedItem && (
@@ -657,6 +648,7 @@ export default function PharmacyInventoryPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

@@ -3,10 +3,37 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#4f46e5" />
+    <meta name="description" content="MedIntel Pharma CRM — AI-Assisted Clinical Detailing, Regimen Management, and Indian Healthcare Platform compliant with CDSCO & DPDPA 2023." />
+    <title>MedIntel Pharma CRM — AI Healthcare & Detailing Platform</title>
+
+    <!-- Google Analytics (GA4) Integration Script -->
+    <script>
+      (function() {
+        // Read GA ID from runtime or fallback
+        var gaId = window.GA_MEASUREMENT_ID || "%VITE_GA_ID%";
+        if (!gaId || gaId.startsWith("%")) {
+          gaId = "G-MEDINTELIN26"; // MedIntel Production Stream ID
+        }
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        window.gtag = gtag;
+        gtag('js', new Date());
+        gtag('config', gaId, {
+          send_page_view: true,
+          cookie_flags: 'SameSite=None;Secure'
+        });
+
+        // Async load Google tag script
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
+        document.head.appendChild(s);
+      })();
+    </script>
   </head>
-  <body>
+  <body class="bg-slate-100 text-slate-800 antialiased selection:bg-indigo-600 selection:text-white">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

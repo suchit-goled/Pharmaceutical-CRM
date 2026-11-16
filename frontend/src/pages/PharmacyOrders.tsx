@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import Sidebar from "../components/layout/Sidebar";
-import Header from "../components/layout/Header";
+import DashboardLayout from "../layouts/DashboardLayout";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import api from "../services/api";
+import PaymentModal from "../components/common/PaymentModal";
 import {
   PackageCheck,
   CheckCircle2,
@@ -12,7 +12,7 @@ import {
   Store,
   Pill,
   ShieldAlert,
-  FileSpreadsheet
+  CreditCard
 } from "lucide-react";
 
 interface PharmacyOrder {
@@ -64,6 +64,8 @@ export default function PharmacyOrders() {
 
   // Status Update Modal (Pharmacist)
   const [selectedOrder, setSelectedOrder] = useState<PharmacyOrder | null>(null);
+  const [paymentOrder, setPaymentOrder] = useState<PharmacyOrder | null>(null);
+  const [paidOrderIds, setPaidOrderIds] = useState<number[]>([]);
   const [statusUpdateForm, setStatusUpdateForm] = useState({
     status: "Preparing",
     pharmacist_notes: ""
@@ -146,19 +148,15 @@ export default function PharmacyOrders() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-100">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <Header
-          title={isPharmacist ? "Pharmacy Dispensing & Prescription Queue" : "Pharmacy Prescription Orders"}
-          subtitle={
-            isPharmacist
-              ? "Verify digital prescriptions, validate Schedule H/H1 status, and maintain CDSCO Form 20/21 dispensing registers"
-              : "Submit your authorized doctor prescriptions to verified Indian chemists and track fulfillment status"
-          }
-        />
-
-        <main className="p-4 md:p-8 space-y-6">
+    <DashboardLayout
+      title={isPharmacist ? "Pharmacy Dispensing & Prescription Queue" : "Pharmacy Prescription Orders"}
+      subtitle={
+        isPharmacist
+          ? "Verify digital prescriptions, validate Schedule H/H1 status, and maintain CDSCO Form 20/21 dispensing registers"
+          : "Submit your authorized doctor prescriptions to verified Indian chemists and track fulfillment status"
+      }
+    >
+      <div className="space-y-6">
           {/* Action / Banner */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div>
@@ -309,10 +307,30 @@ export default function PharmacyOrders() {
                         </button>
                       )}
 
+                      {!isPharmacist && !isDispensed && (
+                        <>
+                          {paidOrderIds.includes(ord.id) ? (
+                            <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                              <CheckCircle2 size={15} />
+                              Paid Online
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setPaymentOrder(ord)}
+                              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition"
+                            >
+                              <CreditCard size={14} />
+                              Pay Online (₹{ord.total_amount_inr || 240})
+                            </button>
+                          )}
+                        </>
+                      )}
+
                       {isDispensed && (
                         <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
                           <CheckCircle2 size={16} />
-                          Dispensed & Registered
+                          Dispensed &amp; Registered
                         </div>
                       )}
                     </div>
@@ -321,8 +339,6 @@ export default function PharmacyOrders() {
               })}
             </div>
           )}
-        </main>
-      </div>
 
       {/* Place Order Modal (Patient) */}
       {showOrderModal && (
@@ -514,6 +530,24 @@ export default function PharmacyOrders() {
           </div>
         </div>
       )}
-    </div>
+
+      {/* Indian Payment Gateway Modal for Medicine Order */}
+      {paymentOrder && (
+        <PaymentModal
+          isOpen={!!paymentOrder}
+          onClose={() => setPaymentOrder(null)}
+          amount={paymentOrder.total_amount_inr || 240}
+          title={`Order #${paymentOrder.order_number}: ${paymentOrder.medicine_name || "Prescription Medicines"}`}
+          description={`Fulfilling Chemist: ${paymentOrder.pharmacy_name || "Authorized Retail Dispensary"} • ${paymentOrder.delivery_type}`}
+          patientName={paymentOrder.patient_name}
+          onPaymentSuccess={(orderId?: string) => {
+            setPaidOrderIds((prev) => [...prev, paymentOrder.id]);
+            setPaymentOrder(null);
+            showToast(`Medicine payment processed! Ref ID: ${orderId || "PAID"}. Receipt emailed.`, "success");
+          }}
+        />
+      )}
+      </div>
+    </DashboardLayout>
   );
 }

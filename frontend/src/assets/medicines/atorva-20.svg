@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg-atorva" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FAF5FF"/>
+      <stop offset="100%" stop-color="#F3E8FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="200" rx="16" fill="url(#bg-atorva)"/>
+  <rect x="30" y="35" width="260" height="130" rx="12" fill="#FFFFFF" stroke="#D8B4FE" stroke-width="2"/>
+  <rect x="30" y="35" width="260" height="28" rx="12" fill="#9333EA"/>
+  <text x="45" y="54" fill="#FFFFFF" font-family="system-ui, sans-serif" font-size="12" font-weight="bold">ATORVA 20 • ATORVASTATIN 20mg</text>
+  <g fill="#FFFFFF" stroke="#A855F7" stroke-width="1.5">
+    <ellipse cx="80" cy="95" rx="16" ry="10"/>
+    <ellipse cx="140" cy="95" rx="16" ry="10"/>
+    <ellipse cx="200" cy="95" rx="16" ry="10"/>
+    <ellipse cx="255" cy="95" rx="16" ry="10"/>
+    <ellipse cx="80" cy="135" rx="16" ry="10"/>
+    <ellipse cx="140" cy="135" rx="16" ry="10"/>
+    <ellipse cx="200" cy="135" rx="16" ry="10"/>
+    <ellipse cx="255" cy="135" rx="16" ry="10"/>
+  </g>
+  <text x="45" y="158" fill="#7E22CE" font-family="system-ui, sans-serif" font-size="9" font-weight="bold">CARDIOVASCULAR • ONCE DAILY</text>
+</svg>

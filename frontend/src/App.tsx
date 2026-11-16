@@ -23,6 +23,7 @@ import Appointments from "./pages/Appointments";
 import PharmacyOrders from "./pages/PharmacyOrders";
 import MedicalReports from "./pages/MedicalReports";
 import PharmacyInventoryPage from "./pages/PharmacyInventoryPage";
+import NotFound from "./pages/NotFound";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -214,7 +215,7 @@ export default function App() {
 
               {/* Default Fallback */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
         </ToastProvider>

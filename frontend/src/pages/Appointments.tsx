@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import Sidebar from "../components/layout/Sidebar";
-import Header from "../components/layout/Header";
+import DashboardLayout from "../layouts/DashboardLayout";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import api from "../services/api";
+import PaymentModal from "../components/common/PaymentModal";
 import {
   Calendar,
   Clock,
@@ -18,7 +18,7 @@ import {
   Languages,
   ShieldCheck,
   Send,
-  AlertCircle
+  CreditCard
 } from "lucide-react";
 
 interface Appointment {
@@ -104,6 +104,8 @@ export default function Appointments() {
   const [aiPatientName, setAiPatientName] = useState("Rohan Sharma");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<AIConsultationResponse | null>(null);
+  const [paymentAppt, setPaymentAppt] = useState<Appointment | null>(null);
+  const [paidApptIds, setPaidApptIds] = useState<number[]>([]);
 
   const fetchAppointments = async () => {
     try {
@@ -240,19 +242,15 @@ export default function Appointments() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-100">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <Header
-          title={isDoctor ? "Clinical Appointment Queue" : "Doctor Appointments & Consultations"}
-          subtitle={
-            isDoctor
-              ? "Review patient consultation requests, conduct bilingual evaluations, and record clinical EHR notes"
-              : "Book appointments with SMC/NMC verified physicians, track status, and view clinical consultation records"
-          }
-        />
-
-        <main className="p-4 md:p-8 space-y-6">
+    <DashboardLayout
+      title={isDoctor ? "Clinical Appointment Queue" : "Doctor Appointments & Consultations"}
+      subtitle={
+        isDoctor
+          ? "Review patient consultation requests, conduct bilingual evaluations, and record clinical EHR notes"
+          : "Book appointments with SMC/NMC verified physicians, track status, and view clinical consultation records"
+      }
+    >
+      <div className="space-y-6">
           {/* Top Banner / Action Bar */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div>
@@ -471,8 +469,23 @@ export default function Appointments() {
                             </button>
                           )}
                           {isConfirmed && (
-                            <div className="w-full text-center text-xs text-emerald-700 font-semibold py-1.5 bg-emerald-50 rounded-xl border border-emerald-200">
-                              Ready for Scheduled Consultation
+                            <div className="w-full flex flex-col gap-2">
+                              {paidApptIds.includes(appt.id) ? (
+                                <div className="w-full text-center text-xs text-emerald-700 font-semibold py-1.5 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-center gap-1">
+                                  <CheckCircle2 size={13} /> Fee Paid (₹{appt.consultation_fee_inr || 500})
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setPaymentAppt(appt)}
+                                  className="w-full flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+                                >
+                                  <CreditCard size={14} /> Pay Fee (₹{appt.consultation_fee_inr || 500})
+                                </button>
+                              )}
+                              <div className="w-full text-center text-[11px] text-slate-500 font-medium">
+                                Ready for Scheduled Consultation
+                              </div>
                             </div>
                           )}
                           {isCompleted && (
@@ -488,8 +501,6 @@ export default function Appointments() {
               })}
             </div>
           )}
-        </main>
-      </div>
 
       {/* Book Appointment Modal (Patient) */}
       {showBookModal && (
@@ -938,6 +949,24 @@ export default function Appointments() {
           </div>
         </div>
       )}
-    </div>
+
+      {/* Indian Payment Gateway Modal for OPD Consultation Fee */}
+      {paymentAppt && (
+        <PaymentModal
+          isOpen={!!paymentAppt}
+          onClose={() => setPaymentAppt(null)}
+          amount={paymentAppt.consultation_fee_inr || 500}
+          title={`OPD Fee: ${paymentAppt.doctor_name || "Specialist Physician"}`}
+          description={`Consultation #${paymentAppt.id} • ${paymentAppt.appointment_date} at ${paymentAppt.slot_time}`}
+          patientName={paymentAppt.patient_name}
+          onPaymentSuccess={(orderId?: string) => {
+            setPaidApptIds((prev) => [...prev, paymentAppt.id]);
+            setPaymentAppt(null);
+            showToast(`Payment successful! Ref ID: ${orderId || "PAID"}. Consultation confirmed.`, "success");
+          }}
+        />
+      )}
+      </div>
+    </DashboardLayout>
   );
 }

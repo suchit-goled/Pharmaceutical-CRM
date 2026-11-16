@@ -786,4 +786,81 @@ class DoctorPatientConsultationAIResponse(BaseModel):
     prescribing_cautions: List[str]
 
 
+# ---------------------------------------------------------
+# Support, Contact & Feedback Schemas
+# ---------------------------------------------------------
+class ContactRequest(BaseModel):
+    name: str = Field(..., min_length=2)
+    email: str = Field(..., min_length=5)
+    phone: Optional[str] = None
+    subject: str = Field(..., min_length=3)
+    message: str = Field(..., min_length=5)
+    category: str = "General Support"  # Clinical Support, Pharmacy Query, Appointment Reschedule, Billing, General Support
+
+class ContactResponse(BaseModel):
+    ticket_id: str
+    status: str = "Received"
+    message: str
+    estimated_response_hours: int
+    whatsapp_helpline: str = "+91 98450 12345"
+    created_at: datetime
+
+
+# ---------------------------------------------------------
+# Payment & Checkout Schemas (UPI, RuPay, NetBanking, COD)
+# ---------------------------------------------------------
+class PaymentOrderRequest(BaseModel):
+    order_type: str = "CONSULTATION"  # CONSULTATION, PHARMACY_ORDER
+    reference_id: int
+    amount_inr: float
+    patient_name: str
+    patient_phone: Optional[str] = None
+    patient_email: Optional[str] = None
+    payment_method: str = "UPI"  # UPI, CARD, NETBANKING, COD
+
+class PaymentOrderResponse(BaseModel):
+    payment_id: str
+    invoice_number: str
+    order_type: str
+    reference_id: int
+    base_amount_inr: float
+    cgst_inr: float
+    sgst_inr: float
+    total_amount_inr: float
+    currency: str = "INR"
+    status: str = "PENDING"
+    qr_code_upi_string: str
+    payment_methods_available: List[str]
+    created_at: datetime
+
+class PaymentVerifyRequest(BaseModel):
+    payment_id: str
+    reference_id: int
+    order_type: str
+    payment_method: str
+    transaction_reference: Optional[str] = None
+    amount_inr: float
+
+class PaymentVerifyResponse(BaseModel):
+    success: bool
+    status: str = "CONFIRMED"
+    invoice_number: str
+    transaction_id: str
+    receipt_message: str
+    verified_at: datetime
+
+
+# ---------------------------------------------------------
+# Email Verification Schemas
+# ---------------------------------------------------------
+class EmailVerificationRequest(BaseModel):
+    email: str
+
+class EmailVerificationResponse(BaseModel):
+    email: str
+    status: str = "SENT"
+    message: str
+
+
+
 
