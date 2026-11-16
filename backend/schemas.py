@@ -669,6 +669,7 @@ class MedicalReportCreate(BaseModel):
     file_name: Optional[str] = None
     file_size_kb: float = 0.0
     biomarkers: Optional[dict] = None
+    clinical_observations: Optional[str] = None
 
 class MedicalReportReviewUpdate(BaseModel):
     clinical_observations: str

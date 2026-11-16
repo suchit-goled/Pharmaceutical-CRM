@@ -67,26 +67,37 @@ def fallback_extract(prompt: str) -> Dict[str, Any]:
 
     # 2. Hospital / HCO extraction
     hospital = ""
-    hosp_match = re.search(r"([A-Z][a-zA-Z\s]+(?:Hospital|Clinic|Medical Center|Health|Infirmary))", prompt)
+    hosp_match = re.search(r"([A-Z][a-zA-Z\s]+(?:Hospital|Clinic|Medical Center|Health|Infirmary|Health City))", prompt)
     if hosp_match:
         hospital = hosp_match.group(1).strip()
     else:
-        for common in ["Mount Sinai", "Mayo Clinic", "Cleveland Clinic", "Mercy Hospital", "Memorial Hospital", "General Hospital"]:
+        for common in [
+            "MedIntel Specialty Hospital", "Apollo Hospital", "Fortis Hospital", 
+            "Manipal Hospital", "Narayana Health", "Max Healthcare", 
+            "Mount Sinai", "Mayo Clinic", "Cleveland Clinic", "Mercy Hospital"
+        ]:
             if common.lower() in prompt.lower():
                 hospital = common
                 break
 
     # 3. Specialization
-    specialization = "Cardiology"
+    specialization = "General Medicine"
     specs = {
         "cardio": "Cardiology",
+        "hyperten": "Cardiology & Vascular Medicine",
+        "diabet": "Diabetology & Endocrinology",
+        "endo": "Endocrinology",
+        "pulmon": "Pulmonology & Respiratory",
+        "infect": "Infectious Diseases",
         "oncol": "Oncology",
         "neuro": "Neurology",
         "pediat": "Pediatrics",
-        "endo": "Endocrinology",
         "rheum": "Rheumatology",
         "ortho": "Orthopedics",
-        "psych": "Psychiatry"
+        "psych": "Psychiatry",
+        "internal": "Internal Medicine",
+        "fever": "Internal Medicine",
+        "general": "General Medicine"
     }
     for k, v in specs.items():
         if k in prompt.lower():
@@ -94,8 +105,14 @@ def fallback_extract(prompt: str) -> Dict[str, Any]:
             break
 
     # 4. Product extraction
-    product = "CardioGuard"
-    known_products = ["CardioGuard", "OncoShield", "NeuroCalm", "GlucoFlow", "Atorvastatin", "Pembrolizumab", "Metformin"]
+    product = "Telmisartan 40mg"
+    known_products = [
+        "Telmisartan 40mg", "Telmisartan", "Augmentin 625mg", "Augmentin", 
+        "Dolo 650", "Glycomet 500mg SR", "Glycomet", "Pan-D", "Azithromycin 500mg", 
+        "Azithromycin", "Paracetamol", "Amlodipine 5mg", "Amlodipine", 
+        "Rosuvastatin 10mg", "Rosuvastatin", "CardioGuard", "OncoShield", 
+        "NeuroCalm", "GlucoFlow", "Atorvastatin", "Pembrolizumab", "Metformin"
+    ]
     for p in known_products:
         if p.lower() in prompt.lower():
             product = p
@@ -123,8 +140,8 @@ def fallback_extract(prompt: str) -> Dict[str, Any]:
     followUp = date.fromordinal(date.today().toordinal() + 14).isoformat()
 
     return {
-        "doctor": doctor or "Dr. Robert Smith",
-        "hospital": hospital or "Metro Health Medical Center",
+        "doctor": doctor or "Dr. Gregory House",
+        "hospital": hospital or "MedIntel Specialty Hospital",
         "specialization": specialization,
         "interactionType": "In-Person Detailing",
         "visitDate": today,

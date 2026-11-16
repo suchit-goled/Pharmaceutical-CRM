@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BrainCircuit, ShieldCheck, Lock, Mail, ArrowRight, CheckCircle2 } from "lucide-react";
+import { BrainCircuit, ShieldCheck, Lock, Mail, ArrowRight, CheckCircle2, Eye, EyeOff, Zap } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import WhatsAppButton from "../components/common/WhatsAppButton";
@@ -12,6 +12,7 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,7 +30,7 @@ export default function Login() {
       if (err.response?.data?.detail) {
         msg = err.response.data.detail;
       } else if (err.code === "ERR_NETWORK" || !err.response) {
-        msg = "Backend server is not reachable. Please make sure the FastAPI server is running on http://127.0.0.1:8000.";
+        msg = "Backend server is not reachable. Please check your network or server status.";
       }
       setError(msg);
       showToast(msg, "error");
@@ -38,10 +39,28 @@ export default function Login() {
     }
   };
 
-  const handleQuickLogin = (quickEmail: string, quickPass: string) => {
+  const handleQuickLogin = async (quickEmail: string, quickPass: string) => {
     setEmail(quickEmail);
     setPassword(quickPass);
     setError(null);
+    setLoading(true);
+
+    try {
+      await login(quickEmail, quickPass);
+      showToast("Signed in successfully. Welcome to MedIntel!", "success");
+      navigate("/dashboard");
+    } catch (err: any) {
+      let msg = "Invalid email or password. Please try again.";
+      if (err.response?.data?.detail) {
+        msg = err.response.data.detail;
+      } else if (err.code === "ERR_NETWORK" || !err.response) {
+        msg = "Backend server is not reachable. Please check your connection.";
+      }
+      setError(msg);
+      showToast(msg, "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -86,6 +105,7 @@ export default function Login() {
                 <input
                   type="email"
                   required
+                  autoComplete="username"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="user@medintelcrm.in"
@@ -103,13 +123,23 @@ export default function Login() {
                   <Lock size={17} />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="block w-full pl-10 pr-3 py-2.5 text-xs sm:text-sm rounded-xl outline-none bg-transparent"
+                  className="block w-full pl-10 pr-10 py-2.5 text-xs sm:text-sm rounded-xl outline-none bg-transparent"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
@@ -137,73 +167,100 @@ export default function Login() {
 
           {/* Role-Specific Quick Login Shortcuts */}
           <div className="mt-6 pt-5 border-t border-slate-200">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-              Quick Role-Wise Demo Logins
-            </p>
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                <Zap size={13} className="text-amber-500" />
+                Quick 1-Click Role Logins
+              </p>
+              <span className="text-[10px] text-slate-400 font-medium">Instant Sign-In</span>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {/* Patient */}
               <button
                 type="button"
+                disabled={loading}
                 onClick={() => handleQuickLogin("patient.john@example.com", "PatientPassword123!")}
-                className="text-left p-2.5 rounded-xl border border-slate-200 hover:bg-indigo-50/70 hover:border-indigo-300 text-xs text-slate-700 transition"
+                className="text-left p-2.5 rounded-xl border border-slate-200 hover:bg-indigo-50/70 hover:border-indigo-300 text-xs text-slate-700 transition group disabled:opacity-60"
               >
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-800 text-[11px]">John Doe</span>
                   <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-100 text-indigo-700 font-bold">PATIENT</span>
                 </div>
                 <span className="text-[10px] text-slate-500 block truncate">patient.john@example.com</span>
+                <span className="text-[9px] text-indigo-600 font-mono font-medium block mt-0.5 group-hover:underline">
+                  Pass: PatientPassword123! ⚡
+                </span>
               </button>
 
               {/* Doctor */}
               <button
                 type="button"
+                disabled={loading}
                 onClick={() => handleQuickLogin("medical.director@medintelcrm.com", "MedDirector123!")}
-                className="text-left p-2.5 rounded-xl border border-slate-200 hover:bg-amber-50/70 hover:border-amber-300 text-xs text-slate-700 transition"
+                className="text-left p-2.5 rounded-xl border border-slate-200 hover:bg-amber-50/70 hover:border-amber-300 text-xs text-slate-700 transition group disabled:opacity-60"
               >
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-800 text-[11px]">Dr. Gregory House</span>
                   <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-100 text-amber-700 font-bold">DOCTOR</span>
                 </div>
                 <span className="text-[10px] text-slate-500 block truncate">medical.director@medintelcrm.com</span>
+                <span className="text-[9px] text-amber-700 font-mono font-medium block mt-0.5 group-hover:underline">
+                  Pass: MedDirector123! ⚡
+                </span>
               </button>
 
               {/* Pharmacist */}
               <button
                 type="button"
+                disabled={loading}
                 onClick={() => handleQuickLogin("pharmacist.mike@example.com", "PharmacistPassword123!")}
-                className="text-left p-2.5 rounded-xl border border-slate-200 hover:bg-emerald-50/70 hover:border-emerald-300 text-xs text-slate-700 transition"
+                className="text-left p-2.5 rounded-xl border border-slate-200 hover:bg-emerald-50/70 hover:border-emerald-300 text-xs text-slate-700 transition group disabled:opacity-60"
               >
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-800 text-[11px]">Mike Ross, R.Ph</span>
                   <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-100 text-emerald-700 font-bold">PHARMACIST</span>
                 </div>
                 <span className="text-[10px] text-slate-500 block truncate">pharmacist.mike@example.com</span>
+                <span className="text-[9px] text-emerald-700 font-mono font-medium block mt-0.5 group-hover:underline">
+                  Pass: PharmacistPassword123! ⚡
+                </span>
               </button>
 
               {/* Admin */}
               <button
                 type="button"
+                disabled={loading}
                 onClick={() => handleQuickLogin("admin@medintelcrm.com", "AdminPassword123!")}
-                className="text-left p-2.5 rounded-xl border border-slate-200 hover:bg-purple-50/70 hover:border-purple-300 text-xs text-slate-700 transition"
+                className="text-left p-2.5 rounded-xl border border-slate-200 hover:bg-purple-50/70 hover:border-purple-300 text-xs text-slate-700 transition group disabled:opacity-60"
               >
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-800 text-[11px]">Dr. Eleanor Vance</span>
                   <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-100 text-purple-700 font-bold">ADMIN</span>
                 </div>
                 <span className="text-[10px] text-slate-500 block truncate">admin@medintelcrm.com</span>
+                <span className="text-[9px] text-purple-700 font-mono font-medium block mt-0.5 group-hover:underline">
+                  Pass: AdminPassword123! ⚡
+                </span>
               </button>
 
               {/* Sales Rep */}
               <button
                 type="button"
+                disabled={loading}
                 onClick={() => handleQuickLogin("rep1@medintelcrm.com", "RepPassword123!")}
-                className="sm:col-span-2 text-left p-2 rounded-xl border border-slate-200 hover:bg-blue-50/70 hover:border-blue-300 text-xs text-slate-700 transition flex items-center justify-between"
+                className="sm:col-span-2 text-left p-2.5 rounded-xl border border-slate-200 hover:bg-blue-50/70 hover:border-blue-300 text-xs text-slate-700 transition flex items-center justify-between group disabled:opacity-60"
               >
                 <div>
-                  <span className="font-bold text-slate-800 text-[11px]">Marcus Reynolds (Field Rep)</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800 text-[11px]">Marcus Reynolds (Field Rep)</span>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-100 text-blue-700 font-bold">SALES REP</span>
+                  </div>
                   <span className="text-[10px] text-slate-500 block">rep1@medintelcrm.com</span>
+                  <span className="text-[9px] text-blue-700 font-mono font-medium block mt-0.5 group-hover:underline">
+                    Pass: RepPassword123! ⚡ (Click for Instant Sign In)
+                  </span>
                 </div>
-                <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-100 text-blue-700 font-bold">SALES REP</span>
+                <ArrowRight size={14} className="text-slate-400 group-hover:text-blue-600 transition" />
               </button>
             </div>
           </div>

@@ -58,6 +58,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     navSectionTitle = "Patient Care Portal";
     navItems = [
       { to: "/dashboard", icon: LayoutDashboard, label: "My Health Dashboard" },
+      { to: "/log-interaction", icon: BrainCircuit, label: "Scientific Detailing & AI Report" },
       { to: "/medications", icon: CalendarCheck, label: "My Medications" },
       { to: "/nearby-healthcare", icon: MapPin, label: "Nearby Healthcare Map" },
       { to: "/appointments", icon: Calendar, label: "Book Appointments" },

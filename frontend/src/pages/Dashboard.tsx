@@ -19,7 +19,8 @@ import {
   Plus,
   ArrowRight,
   AlertTriangle,
-  HeartPulse
+  HeartPulse,
+  BrainCircuit
 } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 import api from "../services/api";
@@ -131,6 +132,12 @@ export default function Dashboard() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Link
+              to="/log-interaction"
+              className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold rounded-xl text-sm shadow transition flex items-center gap-2"
+            >
+              <BrainCircuit size={16} /> Consultation AI &amp; Reports
+            </Link>
+            <Link
               to="/medications"
               className="px-4 py-2.5 bg-white text-indigo-700 hover:bg-indigo-50 font-semibold rounded-xl text-sm shadow transition flex items-center gap-2"
             >
@@ -200,6 +207,35 @@ export default function Dashboard() {
               <Calendar size={24} />
             </div>
           </div>
+        </div>
+
+        {/* AI Health Detailing & Medical Reports Banner */}
+        <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 rounded-2xl border border-indigo-700/60 p-6 mb-8 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 bg-indigo-500/30 border border-indigo-400/40 text-emerald-300 rounded-2xl flex items-center justify-center shrink-0 shadow-inner">
+              <BrainCircuit size={26} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">
+                  Scientific Detailing &amp; Clinical Conversation AI
+                </h3>
+                <span className="text-[10px] font-bold px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-full">
+                  AI Consultation Engine
+                </span>
+              </div>
+              <p className="text-xs text-indigo-100/80 mt-1 max-w-2xl leading-relaxed">
+                Paste or record your doctor and pharmacist consultations. MedIntel AI analyzes drug regimens, generates structured clinical summaries, and creates official medical reports saved directly to your electronic health records.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/log-interaction"
+            className="shrink-0 px-4 py-2.5 bg-indigo-500 hover:bg-indigo-400 text-white text-xs sm:text-sm font-semibold rounded-xl shadow transition flex items-center gap-2"
+          >
+            <span>Launch Consultation AI</span>
+            <ArrowRight size={15} />
+          </Link>
         </div>
 
         {/* Two-Column Patient Action Grid */}

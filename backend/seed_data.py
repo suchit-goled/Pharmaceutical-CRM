@@ -36,7 +36,7 @@ def seed():
                 "email": "admin@medintelcrm.com",
                 "full_name": "Dr. Eleanor Vance",
                 "role": "ADMIN",
-                "password": hash_password("AdminPassword123!"),
+                "hashed_password": hash_password("AdminPassword123!"),
                 "phone": "+1 (555) 019-2831",
                 "territory_id": territories_map["North-East Region"]
             },
@@ -44,7 +44,7 @@ def seed():
                 "email": "rep1@medintelcrm.com",
                 "full_name": "Marcus Reynolds",
                 "role": "SALES_REP",
-                "password": hash_password("RepPassword123!"),
+                "hashed_password": hash_password("RepPassword123!"),
                 "phone": "+1 (555) 012-4491",
                 "territory_id": territories_map["North-East Region"]
             },
@@ -52,7 +52,7 @@ def seed():
                 "email": "rep2@medintelcrm.com",
                 "full_name": "Sarah Chen",
                 "role": "SALES_REP",
-                "password": hash_password("RepPassword123!"),
+                "hashed_password": hash_password("RepPassword123!"),
                 "phone": "+1 (555) 014-9923",
                 "territory_id": territories_map["Mid-West Region"]
             },
@@ -60,7 +60,7 @@ def seed():
                 "email": "rep3@medintelcrm.com",
                 "full_name": "David Okafor",
                 "role": "SALES_REP",
-                "password": hash_password("RepPassword123!"),
+                "hashed_password": hash_password("RepPassword123!"),
                 "phone": "+1 (555) 018-7734",
                 "territory_id": territories_map["West Coast Region"]
             },
@@ -68,7 +68,7 @@ def seed():
                 "email": "medical.director@medintelcrm.com",
                 "full_name": "Dr. Gregory House, MD",
                 "role": "MEDICAL_DIRECTOR",
-                "password": hash_password("MedDirector123!"),
+                "hashed_password": hash_password("MedDirector123!"),
                 "phone": "+1 (555) 017-3310",
                 "territory_id": territories_map["North-East Region"]
             },
@@ -76,7 +76,7 @@ def seed():
                 "email": "compliance@medintelcrm.com",
                 "full_name": "Helena Torres, JD",
                 "role": "COMPLIANCE_OFFICER",
-                "password": hash_password("Compliance123!"),
+                "hashed_password": hash_password("Compliance123!"),
                 "phone": "+1 (555) 015-8821",
                 "territory_id": territories_map["North-East Region"]
             }
@@ -89,7 +89,7 @@ def seed():
                     email=u_info["email"],
                     full_name=u_info["full_name"],
                     role=u_info["role"],
-                    hashed_password=u_info["password"],
+                    hashed_password=u_info["hashed_password"],
                     phone=u_info["phone"],
                     territory_id=u_info["territory_id"],
                     is_active=True
