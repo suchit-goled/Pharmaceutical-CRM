@@ -35,3 +35,6 @@ backend/exports/*.json
 # Backups
 .backups/
 
+
+.vercel
+.env*

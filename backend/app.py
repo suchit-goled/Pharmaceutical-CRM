@@ -66,6 +66,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def on_app_startup():
+    from database import ensure_db_initialized
+    ensure_db_initialized()
+
 # ---------------------------------------------------------
 # Health Probes (Requirement for 100k scale & load balancers)
 # ---------------------------------------------------------
@@ -106,7 +111,25 @@ def readiness_check(db: Session = Depends(get_db)):
 # ---------------------------------------------------------
 @app.post("/api/auth/login", response_model=schemas.TokenResponse, tags=["Authentication"])
 def login(creds: schemas.LoginRequest, request: Request, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == creds.email).first()
+    try:
+        user = db.query(models.User).filter(models.User.email == creds.email).first()
+    except Exception as err:
+        from database import ensure_db_initialized
+        ensure_db_initialized()
+        try:
+            user = db.query(models.User).filter(models.User.email == creds.email).first()
+        except Exception:
+            user = None
+
+    if not user:
+        try:
+            if db.query(models.User).count() == 0:
+                from database import ensure_db_initialized
+                ensure_db_initialized()
+                user = db.query(models.User).filter(models.User.email == creds.email).first()
+        except Exception:
+            pass
+
     if not user or not verify_password(creds.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

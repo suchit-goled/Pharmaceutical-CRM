@@ -11,6 +11,8 @@
     "build": "cd frontend && npm run build",
     "test:backend": "cd backend && python -m pytest tests/test_api.py -v",
     "seed": "cd backend && python seed_data.py"
+  },
+  "devDependencies": {
+    "vercel": "^65.16.0"
   }
 }
-
